@@ -206,7 +206,7 @@ export const ServiceSelectionScreen: React.FC = () => {
                   </View>
                   <View style={styles.businessStat}>
                     <MaterialIcons name="local-shipping" size={16} color={GRAY_500} />
-                    <Text style={styles.businessStatText}>€{business.delivery_fee}</Text>
+                    <Text style={styles.businessStatText}>{business.delivery_fee.toLocaleString('fr-FR')} GNF</Text>
                   </View>
                 </View>
               </View>

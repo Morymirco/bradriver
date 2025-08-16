@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Modal, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { DriverDashboardService } from '../services/driverDashboardService';
 
 const DARK_BG = '#181A20';
@@ -26,12 +26,14 @@ const STATUS_COLORS = {
   'confirmed': '#3B82F6',
   'preparing': '#F59E0B',
   'ready': '#10B981',
-  'picked_up': '#10B981',
+  'picked_up': '#8B5CF6',
+  'out_for_delivery': '#8B5CF6',
   'delivered': '#10B981',
   'cancelled': '#EF4444',
   'Commande reçue': '#3B82F6',
   'En préparation': '#F59E0B',
   'Prête pour livraison': '#10B981',
+  'En livraison': '#8B5CF6',
   'Livrée': '#10B981',
   'Annulée': '#EF4444',
 };
@@ -42,6 +44,9 @@ export const OrderDetailScreen: React.FC = () => {
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationError, setVerificationError] = useState('');
 
   useEffect(() => {
     loadOrderDetails();
@@ -69,27 +74,42 @@ export const OrderDetailScreen: React.FC = () => {
   };
 
   const handleCallClient = () => {
-    if (!order?.customer?.phone) {
+    if (!order?.order?.user?.phone_number) {
       Alert.alert('Erreur', 'Numéro de téléphone du client non disponible');
       return;
     }
     
-    Alert.alert('Appeler le client', `Appeler ${order.customer.name} ?`, [
+    Alert.alert('Appeler le client', `Appeler ${order.order.user.name} ?`, [
       { text: 'Annuler', style: 'cancel' },
-      { text: 'Appeler', onPress: () => console.log('Appeler client:', order.customer.phone) },
+      { text: 'Appeler', onPress: () => console.log('Appeler client:', order.order.user.phone_number) },
     ]);
   };
 
   const handleCallRestaurant = () => {
-    if (!order?.business?.phone) {
+    if (!order?.order?.business?.phone) {
       Alert.alert('Erreur', 'Numéro de téléphone du restaurant non disponible');
       return;
     }
     
-    Alert.alert('Appeler le restaurant', `Appeler ${order.business.name} ?`, [
+    Alert.alert('Appeler le restaurant', `Appeler ${order.order.business.name} ?`, [
       { text: 'Annuler', style: 'cancel' },
-      { text: 'Appeler', onPress: () => console.log('Appeler restaurant:', order.business.phone) },
+      { text: 'Appeler', onPress: () => console.log('Appeler restaurant:', order.order.business.phone) },
     ]);
+  };
+
+  // Fonction pour traduire les statuts
+  const translateStatus = (status: string): string => {
+    switch (status) {
+      case 'pending': return 'En attente';
+      case 'confirmed': return 'Confirmée';
+      case 'preparing': return 'En préparation';
+      case 'ready': return 'Prête';
+      case 'picked_up': return 'En route';
+      case 'out_for_delivery': return 'En livraison';
+      case 'delivered': return 'Livrée';
+      case 'cancelled': return 'Annulée';
+      default: return status;
+    }
   };
 
   const handleUpdateStatus = async (newStatus: string) => {
@@ -114,26 +134,54 @@ export const OrderDetailScreen: React.FC = () => {
     ]);
   };
 
-  const handleCompleteOrder = async () => {
-    Alert.alert('Terminer la commande', 'Marquer cette commande comme livrée ?', [
-      { text: 'Annuler', style: 'cancel' },
-      { 
-        text: 'Confirmer', 
-        onPress: async () => {
-          try {
-            const { success, error } = await DriverDashboardService.completeOrder(order.id);
-            if (success) {
-              Alert.alert('Succès', 'Commande terminée avec succès');
-              loadOrderDetails(); // Recharger les détails
-            } else {
-              Alert.alert('Erreur', error || 'Erreur lors de la finalisation');
-            }
-          } catch (error) {
-            Alert.alert('Erreur', 'Erreur lors de la finalisation de la commande');
-          }
-        }
-      },
-    ]);
+  const handleCompleteOrder = () => {
+    setShowVerificationModal(true);
+    setVerificationCode('');
+    setVerificationError('');
+  };
+
+  const handleVerificationSubmit = async () => {
+    if (!verificationCode.trim()) {
+      setVerificationError('Veuillez saisir le code de vérification');
+      return;
+    }
+
+    // Validation basique du code (4 chiffres)
+    if (!/^\d{4}$/.test(verificationCode.trim())) {
+      setVerificationError('Le code doit contenir 4 chiffres');
+      return;
+    }
+
+    try {
+      // Vérifier le code de vérification avec celui stocké dans la base de données
+      const { success: codeValid, error: codeError } = await DriverDashboardService.verifyOrderCode(order.id, verificationCode.trim());
+      
+      if (!codeValid) {
+        setVerificationError(codeError || 'Code de vérification incorrect');
+        return;
+      }
+
+      // Si le code est correct, marquer la commande comme livrée
+      const { success, error } = await DriverDashboardService.completeOrder(order.id);
+      if (success) {
+        setShowVerificationModal(false);
+        setVerificationCode('');
+        setVerificationError('');
+        Alert.alert('Succès', 'Commande livrée avec succès');
+        loadOrderDetails(); // Recharger les détails
+      } else {
+        setVerificationError(error || 'Erreur lors de la finalisation');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la finalisation:', error);
+      setVerificationError('Erreur lors de la finalisation de la commande');
+    }
+  };
+
+  const handleVerificationCancel = () => {
+    setShowVerificationModal(false);
+    setVerificationCode('');
+    setVerificationError('');
   };
 
   if (loading) {
@@ -182,7 +230,7 @@ export const OrderDetailScreen: React.FC = () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <MaterialIcons name="arrow-back" size={26} color={DARK_TEXT} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Commande {order.id}</Text>
+        <Text style={styles.headerTitle}>Commande {order.order?.order_number || order.id}</Text>
         <TouchableOpacity style={styles.moreBtn}>
           <MaterialIcons name="more-vert" size={26} color={DARK_TEXT} />
         </TouchableOpacity>
@@ -193,11 +241,11 @@ export const OrderDetailScreen: React.FC = () => {
         <View style={styles.statusCard}>
           <View style={styles.statusHeader}>
             <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[order.status as keyof typeof STATUS_COLORS] || DARK_GRAY }]}>
-              <Text style={styles.statusText}>{order.status}</Text>
+              <Text style={styles.statusText}>{translateStatus(order.status)}</Text>
             </View>
             <Text style={styles.estimatedTime}>{order.delivery?.estimatedTime || '25-35 min'}</Text>
           </View>
-          <Text style={styles.orderId}>Commande #{order.id}</Text>
+          <Text style={styles.orderId}>Commande #{order.order?.order_number || order.id}</Text>
         </View>
 
         {/* Restaurant Info */}
@@ -207,20 +255,23 @@ export const OrderDetailScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>Restaurant</Text>
           </View>
           <View style={styles.infoCard}>
-            <Text style={styles.restaurantName}>{order.business?.name || 'Restaurant'}</Text>
-            <Text style={styles.address}>{order.business?.address || 'Adresse non disponible'}</Text>
-            {order.business?.rating && (
-            <View style={styles.ratingContainer}>
-              <MaterialIcons name="star" size={16} color="#F59E0B" />
-                <Text style={styles.rating}>{order.business.rating}</Text>
-            </View>
-            )}
-            {order.business?.phone && (
-            <TouchableOpacity style={styles.callBtn} onPress={handleCallRestaurant}>
-              <MaterialIcons name="phone" size={18} color={RED} />
-              <Text style={styles.callBtnText}>Appeler le restaurant</Text>
-            </TouchableOpacity>
-            )}
+                         <Text style={styles.restaurantName}>{order.order?.business?.name || 'Restaurant'}</Text>
+             <Text style={styles.address}>{order.order?.business?.address || 'Adresse non disponible'}</Text>
+             {order.order?.business?.phone && (
+               <Text style={styles.phoneNumber}>{order.order.business.phone}</Text>
+             )}
+             {order.order?.business?.rating && (
+             <View style={styles.ratingContainer}>
+               <MaterialIcons name="star" size={16} color="#F59E0B" />
+                 <Text style={styles.rating}>{order.order.business.rating}</Text>
+             </View>
+             )}
+             {order.order?.business?.phone && (
+             <TouchableOpacity style={styles.callBtn} onPress={handleCallRestaurant}>
+               <MaterialIcons name="phone" size={18} color={RED} />
+               <Text style={styles.callBtnText}>Appeler le restaurant</Text>
+             </TouchableOpacity>
+             )}
           </View>
         </View>
 
@@ -231,19 +282,19 @@ export const OrderDetailScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>Client</Text>
           </View>
           <View style={styles.infoCard}>
-            <Text style={styles.clientName}>{order.customer?.name || 'Client'}</Text>
-            {order.customer?.phone && (
-              <Text style={styles.clientInfo}>{order.customer.phone}</Text>
-            )}
-            {order.customer?.email && (
-              <Text style={styles.clientInfo}>{order.customer.email}</Text>
-            )}
-            {order.customer?.phone && (
-            <TouchableOpacity style={styles.callBtn} onPress={handleCallClient}>
-              <MaterialIcons name="phone" size={18} color={RED} />
-              <Text style={styles.callBtnText}>Appeler le client</Text>
-            </TouchableOpacity>
-            )}
+                         <Text style={styles.clientName}>{order.order?.user?.name || 'Client'}</Text>
+             {order.order?.user?.phone_number && (
+               <Text style={styles.phoneNumber}>{order.order.user.phone_number}</Text>
+             )}
+             {order.order?.user?.email && (
+               <Text style={styles.clientInfo}>{order.order.user.email}</Text>
+             )}
+             {order.order?.user?.phone_number && (
+             <TouchableOpacity style={styles.callBtn} onPress={handleCallClient}>
+               <MaterialIcons name="phone" size={18} color={RED} />
+               <Text style={styles.callBtnText}>Appeler le client</Text>
+             </TouchableOpacity>
+             )}
           </View>
         </View>
 
@@ -259,7 +310,7 @@ export const OrderDetailScreen: React.FC = () => {
                 <MaterialIcons name="location-on" size={16} color="#10B981" />
                 <View style={styles.addressText}>
                   <Text style={styles.addressLabel}>Point de retrait</Text>
-                  <Text style={styles.address}>{order.delivery?.pickupAddress || 'Adresse non disponible'}</Text>
+                  <Text style={styles.address}>{order.order?.business?.address || 'Adresse non disponible'}</Text>
                 </View>
               </View>
               <View style={styles.addressDivider} />
@@ -267,18 +318,18 @@ export const OrderDetailScreen: React.FC = () => {
                 <MaterialIcons name="home" size={16} color={RED} />
                 <View style={styles.addressText}>
                   <Text style={styles.addressLabel}>Adresse de livraison</Text>
-                  <Text style={styles.address}>{order.delivery?.deliveryAddress || 'Adresse non disponible'}</Text>
+                  <Text style={styles.address}>{order.delivery_address || 'Adresse non disponible'}</Text>
                 </View>
               </View>
             </View>
             <View style={styles.deliveryStats}>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{order.delivery?.distance || 'N/A'}</Text>
+                <Text style={styles.statValue}>{order.estimated_distance || 'N/A'} km</Text>
                 <Text style={styles.statLabel}>Distance</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{order.delivery?.estimatedTime || 'N/A'}</Text>
+                <Text style={styles.statValue}>{order.estimated_duration || 'N/A'} min</Text>
                 <Text style={styles.statLabel}>Temps estimé</Text>
               </View>
             </View>
@@ -292,22 +343,27 @@ export const OrderDetailScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>Articles commandés</Text>
           </View>
           <View style={styles.infoCard}>
-            {order.items && order.items.length > 0 ? (
-              order.items.map((item: any, index: number) => (
-                <View key={index} style={[styles.itemRow, index < order.items.length - 1 && styles.itemBorder]}>
-                <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{item.name || 'Article'}</Text>
-                  {item.specialInstructions && (
-                    <Text style={styles.specialInstructions}>{item.specialInstructions}</Text>
-                  )}
-                </View>
-                <View style={styles.itemQuantity}>
-                    <Text style={styles.quantityText}>x{item.quantity || 1}</Text>
-                  </View>
-                  <Text style={styles.itemPrice}>
-                    {((item.price || 0) * (item.quantity || 1)).toFixed(2)} €
-                  </Text>
-                </View>
+            {order.order?.items && order.order.items.length > 0 ? (
+              order.order.items.map((item: any, index: number) => (
+                                 <View key={index} style={[styles.itemRow, index < order.order.items.length - 1 && styles.itemBorder]}>
+                   {item.image && (
+                     <View style={styles.itemImageContainer}>
+                       <Image source={{ uri: item.image }} style={styles.itemImage} />
+                     </View>
+                   )}
+                 <View style={styles.itemInfo}>
+                     <Text style={styles.itemName}>{item.name || 'Article'}</Text>
+                   {item.special_instructions && (
+                     <Text style={styles.specialInstructions}>{item.special_instructions}</Text>
+                   )}
+                 </View>
+                 <View style={styles.itemQuantity}>
+                     <Text style={styles.quantityText}>x{item.quantity || 1}</Text>
+                   </View>
+                   <Text style={styles.itemPrice}>
+                     {((item.price || 0) * (item.quantity || 1)).toLocaleString('fr-FR')} GNF
+                   </Text>
+                 </View>
               ))
             ) : (
               <Text style={styles.noItemsText}>Aucun article disponible</Text>
@@ -324,19 +380,19 @@ export const OrderDetailScreen: React.FC = () => {
           <View style={styles.infoCard}>
             <View style={styles.paymentRow}>
               <Text style={styles.paymentLabel}>Méthode de paiement</Text>
-              <Text style={styles.paymentValue}>{order.payment?.method || 'Non spécifié'}</Text>
+              <Text style={styles.paymentValue}>{order.order?.payment_method || 'Non spécifié'}</Text>
             </View>
             <View style={styles.paymentRow}>
               <Text style={styles.paymentLabel}>Sous-total</Text>
-              <Text style={styles.paymentValue}>{(order.payment?.subtotal || 0) / 100} €</Text>
+              <Text style={styles.paymentValue}>{(order.order?.total || 0).toLocaleString('fr-FR')} GNF</Text>
             </View>
             <View style={styles.paymentRow}>
               <Text style={styles.paymentLabel}>Frais de livraison</Text>
-              <Text style={styles.paymentValue}>{(order.payment?.deliveryFee || 0) / 100} €</Text>
+              <Text style={styles.paymentValue}>{(order.order?.delivery_fee || 0).toLocaleString('fr-FR')} GNF</Text>
             </View>
             <View style={[styles.paymentRow, styles.totalRow]}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>{(order.payment?.total || 0) / 100} €</Text>
+              <Text style={styles.totalValue}>{(order.order?.grand_total || 0).toLocaleString('fr-FR')} GNF</Text>
             </View>
           </View>
         </View>
@@ -391,11 +447,60 @@ export const OrderDetailScreen: React.FC = () => {
             <Text style={styles.actionBtnText}>Marquer comme livrée</Text>
           </TouchableOpacity>
           )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-};
+                 </View>
+       </ScrollView>
+
+       {/* Modal de vérification */}
+       <Modal
+         visible={showVerificationModal}
+         transparent
+         animationType="fade"
+         onRequestClose={handleVerificationCancel}
+       >
+         <View style={styles.modalOverlay}>
+           <View style={styles.verificationModal}>
+             <MaterialIcons name="verified-user" size={48} color={RED} style={styles.verificationIcon} />
+             <Text style={styles.verificationModalTitle}>Vérification de livraison</Text>
+             <Text style={styles.verificationModalText}>
+               Veuillez saisir le code de vérification fourni par le client pour confirmer la livraison.
+             </Text>
+             
+             <View style={styles.verificationInputContainer}>
+               <Text style={styles.verificationInputLabel}>Code de vérification</Text>
+               <TextInput
+                 style={styles.verificationInput}
+                 value={verificationCode}
+                 onChangeText={setVerificationCode}
+                 placeholder="Entrez le code"
+                 placeholderTextColor={DARK_GRAY}
+                 keyboardType="numeric"
+                                   maxLength={4}
+                 autoFocus
+               />
+               {verificationError ? (
+                 <Text style={styles.verificationErrorText}>{verificationError}</Text>
+               ) : null}
+             </View>
+
+             <View style={styles.verificationModalButtons}>
+               <TouchableOpacity style={styles.verificationModalButton} onPress={handleVerificationCancel}>
+                 <Text style={styles.verificationModalButtonText}>Annuler</Text>
+               </TouchableOpacity>
+               <TouchableOpacity 
+                 style={[styles.verificationModalButton, styles.verificationModalButtonConfirm]} 
+                 onPress={handleVerificationSubmit}
+               >
+                 <Text style={[styles.verificationModalButtonText, styles.verificationModalButtonTextConfirm]}>
+                   Confirmer
+                 </Text>
+               </TouchableOpacity>
+             </View>
+           </View>
+         </View>
+       </Modal>
+     </SafeAreaView>
+   );
+ };
 
 const styles = StyleSheet.create({
   container: {
@@ -456,7 +561,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   statusText: {
-    color: RED,
+    color: DARK_TEXT,
     fontWeight: '700',
     fontSize: 14,
   },
@@ -538,11 +643,17 @@ const styles = StyleSheet.create({
     color: DARK_TEXT,
     marginBottom: 4,
   },
-  clientInfo: {
-    fontSize: 14,
-    color: DARK_GRAY,
-    marginBottom: 4,
-  },
+     clientInfo: {
+     fontSize: 14,
+     color: DARK_GRAY,
+     marginBottom: 4,
+   },
+   phoneNumber: {
+     fontSize: 14,
+     color: RED,
+     fontWeight: '600',
+     marginBottom: 8,
+   },
   addressContainer: {
     marginBottom: 16,
   },
@@ -594,11 +705,20 @@ const styles = StyleSheet.create({
     backgroundColor: DARK_GRAY,
     marginHorizontal: 12,
   },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
+     itemRow: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     paddingVertical: 8,
+   },
+   itemImageContainer: {
+     marginRight: 12,
+   },
+   itemImage: {
+     width: 50,
+     height: 50,
+     borderRadius: 8,
+     backgroundColor: DARK_HEADER,
+   },
   itemBorder: {
     borderBottomWidth: 1,
     borderBottomColor: DARK_GRAY,
@@ -777,10 +897,96 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  noTimelineText: {
-    color: DARK_GRAY,
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-}); 
+     noTimelineText: {
+     color: DARK_GRAY,
+     fontSize: 16,
+     fontWeight: '600',
+     textAlign: 'center',
+   },
+       // Styles pour le modal de vérification
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    verificationModal: {
+      backgroundColor: DARK_CARD,
+      borderRadius: 18,
+      padding: 24,
+      width: '90%',
+      maxWidth: 400,
+      alignItems: 'center',
+    },
+   verificationIcon: {
+     marginBottom: 18,
+   },
+   verificationModalTitle: {
+     fontSize: 20,
+     fontWeight: '700',
+     color: RED,
+     marginBottom: 12,
+     textAlign: 'center',
+   },
+   verificationModalText: {
+     color: DARK_TEXT,
+     fontWeight: '500',
+     fontSize: 14,
+     textAlign: 'center',
+     lineHeight: 20,
+     marginBottom: 24,
+   },
+   verificationInputContainer: {
+     width: '100%',
+     marginBottom: 24,
+   },
+   verificationInputLabel: {
+     fontSize: 14,
+     fontWeight: '600',
+     color: DARK_TEXT,
+     marginBottom: 8,
+   },
+   verificationInput: {
+     backgroundColor: DARK_HEADER,
+     borderRadius: 8,
+     paddingHorizontal: 16,
+     paddingVertical: 12,
+     fontSize: 16,
+     color: DARK_TEXT,
+     textAlign: 'center',
+     borderWidth: 1,
+     borderColor: DARK_GRAY,
+   },
+   verificationErrorText: {
+     color: '#EF4444',
+     fontSize: 12,
+     marginTop: 8,
+     textAlign: 'center',
+   },
+   verificationModalButtons: {
+     flexDirection: 'row',
+     justifyContent: 'space-around',
+     width: '100%',
+   },
+   verificationModalButton: {
+     paddingHorizontal: 24,
+     paddingVertical: 12,
+     backgroundColor: DARK_HEADER,
+     borderRadius: 8,
+     marginHorizontal: 8,
+     flex: 1,
+     alignItems: 'center',
+   },
+   verificationModalButtonText: {
+     color: DARK_TEXT,
+     fontWeight: '600',
+     fontSize: 14,
+   },
+   verificationModalButtonConfirm: {
+     backgroundColor: RED,
+   },
+   verificationModalButtonTextConfirm: {
+     color: DARK_TEXT,
+     fontWeight: '700',
+   },
+ }); 

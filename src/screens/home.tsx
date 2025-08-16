@@ -1,22 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-  Pressable,
-  Alert,
-  Modal,
-  RefreshControl
-} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { MaterialIcons } from '@expo/vector-icons';
-import { RootStackParamList } from '../navigation';
+import React, { useEffect, useState } from 'react';
+import {
+    Alert,
+    Dimensions,
+    Modal,
+    Pressable,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import { useDriver, useNotifications } from '../hooks';
+import { RootStackParamList } from '../navigation';
 import { DriverDashboardService, DriverOrder } from '../services/driverDashboardService';
 
 // Couleurs du design system BraPrime
@@ -340,7 +340,7 @@ export const HomeScreen: React.FC = () => {
               <View style={styles.orderHeader}>
                 <View style={styles.orderIdContainer}>
                   <MaterialIcons name="receipt" size={16} color={PRIMARY} />
-                  <Text style={styles.orderId}>#{order.id.slice(-6)}</Text>
+                  <Text style={styles.orderId}>#{order.order?.order_number || order.id}</Text>
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[order.status as keyof typeof STATUS_COLORS] || GRAY_500 }]}>
                   <Text style={styles.statusText}>{order.status}</Text>
@@ -387,7 +387,7 @@ export const HomeScreen: React.FC = () => {
                 </View>
                 <View style={styles.amountInfo}>
                   <Text style={styles.amountLabel}>Total</Text>
-                  <Text style={styles.orderAmount}>€{order.total_amount.toFixed(2)}</Text>
+                  <Text style={styles.orderAmount}>{order.total_amount.toLocaleString('fr-FR')} GNF</Text>
                 </View>
               </View>
             </TouchableOpacity>

@@ -99,12 +99,13 @@ export interface DeliveryOffer {
 export interface Notification {
   id: string;
   user_id: string;
-  user_type: 'driver' | 'client' | 'restaurant';
+  type: string;
   title: string;
   message: string;
-  type: string;
+  priority: 'low' | 'medium' | 'high';
   is_read: boolean;
-  data?: any;
+  data: any;
+  expires_at?: string;
   created_at: string;
 }
 
@@ -122,7 +123,7 @@ export const driverApi = {
   // Récupérer le profil du chauffeur connecté
   async getProfile(driverId: string): Promise<Driver | null> {
     const { data, error } = await supabase
-      .from('drivers')
+      .from('driver_profiles')
       .select('*')
       .eq('id', driverId)
       .single();
@@ -138,7 +139,7 @@ export const driverApi = {
   // Mettre à jour le profil du chauffeur
   async updateProfile(driverId: string, updates: Partial<Driver>): Promise<boolean> {
     const { error } = await supabase
-      .from('drivers')
+      .from('driver_profiles')
       .update(updates)
       .eq('id', driverId);
     
@@ -161,11 +162,14 @@ export const orderApi = {
   // Récupérer les commandes assignées au chauffeur
   async getAssignedOrders(driverId: string): Promise<Order[]> {
     const { data, error } = await supabase
-      .from('orders')
+      .from('driver_orders')
       .select(`
         *,
-        restaurant:restaurants(name, address, phone),
-        client:clients(first_name, last_name, phone, email)
+        order:orders (
+          *,
+          business:businesses(name, address, phone),
+          user:user_profiles(name, phone_number, email)
+        )
       `)
       .eq('driver_id', driverId)
       .order('created_at', { ascending: false });
@@ -264,12 +268,11 @@ export const offerApi = {
 // Fonctions utilitaires pour les notifications
 export const notificationApi = {
   // Récupérer les notifications non lues
-  async getUnreadNotifications(userId: string, userType: string): Promise<Notification[]> {
+  async getUnreadNotifications(userId: string): Promise<Notification[]> {
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
       .eq('user_id', userId)
-      .eq('user_type', userType)
       .eq('is_read', false)
       .order('created_at', { ascending: false });
     

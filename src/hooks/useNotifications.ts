@@ -1,7 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Notification } from '../lib/supabase';
+
+// Interface adaptée pour le nouveau schéma
+interface Notification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  priority: 'low' | 'medium' | 'high';
+  is_read: boolean;
+  data: any;
+  expires_at?: string;
+  created_at: string;
+}
 
 export const useNotifications = () => {
   const { user } = useAuth();
@@ -22,7 +35,6 @@ export const useNotifications = () => {
         .from('notifications')
         .select('*')
         .eq('user_id', driverId)
-        .eq('user_type', 'driver')
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -75,7 +87,6 @@ export const useNotifications = () => {
         .from('notifications')
         .update({ is_read: true })
         .eq('user_id', driverId)
-        .eq('user_type', 'driver')
         .eq('is_read', false);
 
       if (error) {
@@ -135,7 +146,7 @@ export const useNotifications = () => {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${driverId} AND user_type=eq.driver`,
+          filter: `user_id=eq.${driverId}`,
         },
         (payload) => {
           const newNotification = payload.new as Notification;
@@ -151,7 +162,7 @@ export const useNotifications = () => {
           event: 'UPDATE',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${driverId} AND user_type=eq.driver`,
+          filter: `user_id=eq.${driverId}`,
         },
         (payload) => {
           const updatedNotification = payload.new as Notification;

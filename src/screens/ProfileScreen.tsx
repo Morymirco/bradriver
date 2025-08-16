@@ -64,7 +64,7 @@ export const ProfileScreen: React.FC = () => {
             <Text style={styles.statLabel}>Note</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>€{driver?.total_earnings?.toFixed(0) || '0'}</Text>
+            <Text style={styles.statNumber}>{driver?.total_earnings?.toLocaleString('fr-FR') || '0'} GNF</Text>
             <Text style={styles.statLabel}>Gains</Text>
           </View>
         </View>

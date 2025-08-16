@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, FlatList, Image } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { MaterialIcons } from '@expo/vector-icons';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { RootStackParamList } from '../navigation';
+import { DriverDashboardService } from '../services/driverDashboardService';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -14,48 +15,19 @@ const RED = '#E31837';
 const DARK_HEADER = '#23262F';
 const DARK_GRAY = '#353945';
 
-const HISTORY = [
-  { 
-    id: 'CMD-003', 
-    restaurant: 'Burger House', 
-    status: 'Livrée', 
-    date: 'Hier 19:10', 
-    details: '2x Double Cheese, 2x Frites',
-    earnings: '12.50 €'
-  },
-  { 
-    id: 'CMD-004', 
-    restaurant: 'Le Bistrot', 
-    status: 'Annulée', 
-    date: 'Hier 18:00', 
-    details: '1x Plat du jour',
-    earnings: '0.00 €'
-  },
-  { 
-    id: 'CMD-002', 
-    restaurant: 'Sushi Zen', 
-    status: 'Livrée', 
-    date: 'Aujourd\'hui 12:45', 
-    details: '1x Menu saumon, 1x Miso',
-    earnings: '8.75 €'
-  },
-  { 
-    id: 'CMD-001', 
-    restaurant: 'Pizza Bella', 
-    status: 'Livrée', 
-    date: 'Aujourd\'hui 12:30', 
-    details: '2x Margherita, 1x Coca',
-    earnings: '10.25 €'
-  },
-  { 
-    id: 'CMD-005', 
-    restaurant: 'Tacos City', 
-    status: 'Livrée', 
-    date: 'Il y a 2 jours 20:15', 
-    details: '3x Tacos poulet',
-    earnings: '9.80 €'
-  },
-];
+// Interface pour les données d'historique
+interface HistoryItem {
+  id: string;
+  restaurant: string;
+  status: string;
+  date: string;
+  details: string;
+  earnings: string;
+  created_at: string;
+  business_name?: string;
+  order_items?: any[];
+  order_number?: string;
+}
 
 const STATUS_COLORS = { 
   'Livrée': '#10B981', 
@@ -93,11 +65,79 @@ const STATUS_ICONS = {
   'En route': 'directions-car',
 };
 
-const filters = ['Toutes', 'Livrée', 'Annulée', 'En cours', 'En attente', 'Confirmée', 'En préparation', 'Prête', 'En route'];
+const filters = ['Toutes', 'Livrée', 'Annulée'];
 
 export const HistoryScreen: React.FC = () => {
   const [filter, setFilter] = useState('Toutes');
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const navigation = useNavigation<NavigationProp>();
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const { orders, error: historyError } = await DriverDashboardService.getDriverOrders();
+      
+      if (historyError) {
+        setError(historyError);
+        return;
+      }
+
+      // Transformer les données pour l'affichage
+      const historyData = orders.map((order: any) => {
+        const createdDate = new Date(order.created_at);
+        const now = new Date();
+        const diffTime = Math.abs(now.getTime() - createdDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        let dateText = '';
+        if (diffDays === 1) {
+          dateText = `Aujourd'hui ${createdDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+        } else if (diffDays === 2) {
+          dateText = `Hier ${createdDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+        } else {
+          dateText = `Il y a ${diffDays - 1} jours ${createdDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+
+        // Générer les détails des articles
+        const details = order.order?.items?.map((item: any) => 
+          `${item.quantity || 1}x ${item.name || 'Article'}`
+        ).join(', ') || 'Aucun détail disponible';
+
+        // Calculer les gains (15% du total)
+        const earnings = order.status === 'delivered' 
+          ? Math.round((order.order?.grand_total || 0) * 0.15)
+          : 0;
+
+                 return {
+           id: order.id,
+           restaurant: order.order?.business?.name || 'Restaurant',
+           status: order.status,
+           date: dateText,
+           details: details,
+           earnings: `${earnings.toLocaleString('fr-FR')} GNF`,
+           created_at: order.created_at,
+           business_name: order.order?.business?.name,
+           order_items: order.order?.items || [],
+           order_number: order.order?.order_number || order.id
+         };
+      });
+
+      setHistory(historyData);
+    } catch (error) {
+      console.error('Erreur lors du chargement de l\'historique:', error);
+      setError('Erreur lors du chargement de l\'historique');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const translateStatus = (status: string): string => {
     switch (status) {
@@ -112,14 +152,50 @@ export const HistoryScreen: React.FC = () => {
     }
   };
 
-  const filteredHistory = HISTORY.filter(item => {
-    if (filter === 'Toutes') return true;
-    return translateStatus(item.status) === filter;
-  });
+  const filteredHistory = history;
 
   const totalEarnings = filteredHistory
     .filter(item => translateStatus(item.status) === 'Livrée')
-    .reduce((sum, item) => sum + parseFloat(item.earnings.replace(' €', '')), 0);
+    .reduce((sum, item) => sum + parseFloat(item.earnings.replace(' GNF', '').replace(/\s/g, '')), 0);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <MaterialIcons name="arrow-back" size={26} color={DARK_TEXT} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Historique</Text>
+          <View style={{width: 32}} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={RED} />
+          <Text style={styles.loadingText}>Chargement de l'historique...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <MaterialIcons name="arrow-back" size={26} color={DARK_TEXT} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Historique</Text>
+          <View style={{width: 32}} />
+        </View>
+        <View style={styles.errorContainer}>
+          <MaterialIcons name="error" size={64} color={DARK_GRAY} />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={loadHistory}>
+            <Text style={styles.retryBtnText}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -140,31 +216,15 @@ export const HistoryScreen: React.FC = () => {
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{totalEarnings.toFixed(2)} €</Text>
+          <Text style={styles.statNumber}>{totalEarnings.toLocaleString('fr-FR')} GNF</Text>
           <Text style={styles.statLabel}>Gains totaux</Text>
         </View>
       </View>
 
-      {/* Filters */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterBar}
-        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 0 }}
-      >
-        {filters.map(f => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.filterBtn, filter === f && styles.filterBtnActive]}
-            onPress={() => setFilter(f)}
-          >
-            <Text style={filter === f ? styles.filterTextActive : styles.filterText}>{f}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      
 
-      {/* History List */}
-      <ScrollView style={styles.scrollView} contentContainerStyle={{paddingBottom: 40}}>
+             {/* History List */}
+       <ScrollView style={styles.scrollView} contentContainerStyle={{paddingBottom: 20}}>
         {filteredHistory.length === 0 ? (
           <View style={styles.emptyContainer}>
             <MaterialIcons name="history" size={64} color={DARK_GRAY} />
@@ -180,10 +240,10 @@ export const HistoryScreen: React.FC = () => {
             >
               <View style={styles.cardHeader}>
                 <View style={styles.rowBetween}>
-                  <View style={{flexDirection:'row', alignItems:'center'}}>
-                    <MaterialIcons name={(STATUS_ICONS[translateStatus(item.status) as keyof typeof STATUS_ICONS] || 'info') as any} size={22} color={STATUS_COLORS[translateStatus(item.status) as keyof typeof STATUS_COLORS] || DARK_GRAY} style={{marginRight:8}} />
-                    <Text style={styles.cardId}>{item.id}</Text>
-                  </View>
+                                     <View style={{flexDirection:'row', alignItems:'center'}}>
+                     <MaterialIcons name={(STATUS_ICONS[translateStatus(item.status) as keyof typeof STATUS_ICONS] || 'info') as any} size={22} color={STATUS_COLORS[translateStatus(item.status) as keyof typeof STATUS_COLORS] || DARK_GRAY} style={{marginRight:8}} />
+                     <Text style={styles.cardId}>#{item.order_number || item.id}</Text>
+                   </View>
                   <View style={[styles.statusBadge, {backgroundColor: STATUS_COLORS[translateStatus(item.status) as keyof typeof STATUS_COLORS] || DARK_GRAY, shadowColor: STATUS_COLORS[translateStatus(item.status) as keyof typeof STATUS_COLORS] || DARK_GRAY, shadowOpacity: 0.18, shadowRadius: 4, elevation: 2}]}> 
                     <Text style={styles.statusText}>{translateStatus(item.status)}</Text>
                   </View>
@@ -239,9 +299,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: DARK_CARD,
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 12,
     borderRadius: 12,
-    padding: 20,
+    padding: 16,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -253,10 +313,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: RED,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   statLabel: {
     fontSize: 14,
@@ -268,34 +328,7 @@ const styles = StyleSheet.create({
     backgroundColor: DARK_GRAY,
     marginHorizontal: 20,
   },
-  filterBar: {
-    backgroundColor: DARK_HEADER,
-    paddingVertical: 0,
-    paddingHorizontal: 16,
-    minHeight: 0,
-    height: 'auto',
-  },
-  filterBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    backgroundColor: DARK_GRAY,
-    borderRadius: 16,
-    marginRight: 12,
-    alignSelf: 'center',
-  },
-  filterBtnActive: {
-    backgroundColor: RED,
-  },
-  filterText: {
-    color: DARK_TEXT,
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  filterTextActive: {
-    color: DARK_TEXT,
-    fontWeight: '700',
-    fontSize: 13,
-  },
+
   scrollView: {
     flex: 1,
     backgroundColor: DARK_BG,
@@ -303,7 +336,7 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 80,
+    paddingTop: 60,
   },
   emptyText: {
     fontSize: 16,
@@ -311,22 +344,55 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontWeight: '600',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: DARK_TEXT,
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: DARK_TEXT,
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 16,
+  },
+  retryBtn: {
+    backgroundColor: RED,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+  },
+  retryBtnText: {
+    color: DARK_TEXT,
+    fontSize: 16,
+    fontWeight: '700',
+  },
   card: {
     backgroundColor: DARK_CARD,
     borderRadius: 16,
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.13,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.02)',
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   cardMargin: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   cardSeparator: {
     height: 1,
@@ -335,10 +401,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   cardHeader: {
-    padding: 18,
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: DARK_GRAY,
-    backgroundColor: 'rgba(255,255,255,0.01)',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.02)',
   },
   rowBetween: {
     flexDirection: 'row',
@@ -347,36 +413,37 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardId: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: DARK_TEXT,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   statusText: {
     color: DARK_TEXT,
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 13,
   },
   cardRestaurant: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: RED,
-    marginTop: 2,
-    marginBottom: 2,
+    marginTop: 4,
+    marginBottom: 4,
   },
   cardContent: {
-    padding: 18,
-    paddingTop: 10,
-    backgroundColor: 'rgba(255,255,255,0.01)',
+    padding: 16,
+    paddingTop: 12,
+    backgroundColor: 'rgba(255,255,255,0.02)',
   },
   cardDetails: {
     fontSize: 15,
     color: DARK_TEXT,
-    marginBottom: 10,
+    marginBottom: 12,
+    lineHeight: 20,
   },
   cardFooter: {
     flexDirection: 'row',
@@ -384,11 +451,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardTime: {
-    fontSize: 13,
-    color: DARK_GRAY,
+    fontSize: 14,
+    color: '#E5E7EB',
+    fontWeight: '500',
   },
   earnings: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: DARK_GRAY,
   },

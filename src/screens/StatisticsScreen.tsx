@@ -62,7 +62,7 @@ export const StatisticsScreen: React.FC = () => {
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <MaterialIcons name="euro" size={32} color={PRIMARY} />
-          <Text style={styles.statNumber}>{totalGains.toFixed(2)} €</Text>
+          <Text style={styles.statNumber}>{totalGains.toLocaleString('fr-FR')} GNF</Text>
           <Text style={styles.statLabel}>Gains totaux</Text>
         </View>
       </View>

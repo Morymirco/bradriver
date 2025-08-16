@@ -1,22 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-  Pressable,
-  Alert,
-  Modal,
-  RefreshControl
-} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { MaterialIcons } from '@expo/vector-icons';
-import { RootStackParamList } from '../navigation';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Dimensions,
+  Modal,
+  Pressable,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { useDriver, useNotifications } from '../hooks';
+import { RootStackParamList } from '../navigation';
 import { DriverDashboardService, DriverOrder } from '../services/driverDashboardService';
 
 // Couleurs du design system BraPrime
@@ -34,6 +34,7 @@ const STATUS_COLORS = {
   'preparing': '#F59E0B',
   'ready': '#10B981',
   'picked_up': '#8B5CF6',
+  'out_for_delivery': '#8B5CF6',
   'delivered': '#10B981',
   'cancelled': '#EF4444',
   'En attente': '#F59E0B',
@@ -41,6 +42,7 @@ const STATUS_COLORS = {
   'En préparation': '#F59E0B',
   'Prête': '#10B981',
   'En route': '#8B5CF6',
+  'En livraison': '#8B5CF6',
   'Livrée': '#10B981',
   'Annulée': '#EF4444',
 };
@@ -51,7 +53,7 @@ const DARK_TEXT = '#fff';
 const DARK_HEADER = '#23262F';
 const DARK_GRAY = '#353945';
 
-const assignedFilters = ['Toutes', 'En attente', 'Confirmée', 'En préparation', 'Prête', 'En route', 'Livrée', 'Annulée'];
+const assignedFilters = ['Toutes', 'En attente', 'Confirmée', 'En préparation', 'Prête', 'En livraison', 'Livrée', 'Annulée'];
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -103,6 +105,21 @@ export const HomeScreen: React.FC = () => {
     setRefreshing(false);
   };
 
+  // Fonction pour traduire les statuts
+  const translateStatus = (status: string): string => {
+    switch (status) {
+      case 'pending': return 'En attente';
+      case 'confirmed': return 'Confirmée';
+      case 'preparing': return 'En préparation';
+      case 'ready': return 'Prête';
+      case 'picked_up': return 'En route';
+      case 'out_for_delivery': return 'En livraison';
+      case 'delivered': return 'Livrée';
+      case 'cancelled': return 'Annulée';
+      default: return status;
+    }
+  };
+
   // Charger les commandes au montage du composant
   useEffect(() => {
     loadOrders();
@@ -118,20 +135,6 @@ export const HomeScreen: React.FC = () => {
   const openDrawer = () => setDrawerOpen(true);
   const closeDrawer = () => setDrawerOpen(false);
 
-  // Fonction pour traduire les statuts
-  const translateStatus = (status: string): string => {
-    switch (status) {
-      case 'pending': return 'En attente';
-      case 'confirmed': return 'Confirmée';
-      case 'preparing': return 'En préparation';
-      case 'ready': return 'Prête';
-      case 'picked_up': return 'En route';
-      case 'delivered': return 'Livrée';
-      case 'cancelled': return 'Annulée';
-      default: return status;
-    }
-  };
-
   // Fonction pour gérer la déconnexion
   const handleLogout = () => {
     setShowLogoutModal(true);
@@ -146,6 +149,18 @@ export const HomeScreen: React.FC = () => {
 
   const cancelLogout = () => {
     setShowLogoutModal(false);
+  };
+
+  // Fonction pour obtenir l'icône du type de service
+  const getServiceIcon = (type: string) => {
+    switch (type) {
+      case 'pharmacy': return 'local-pharmacy';
+      case 'restaurant': return 'restaurant';
+      case 'grocery': return 'shopping-cart';
+      case 'independent': return 'person';
+      case 'service': return 'business';
+      default: return 'business';
+    }
   };
 
   return (
@@ -173,6 +188,11 @@ export const HomeScreen: React.FC = () => {
           <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); navigation.navigate('Statistics' as never); }}>
             <Text style={styles.drawerItemText}>📊 Statistiques</Text>
           </TouchableOpacity>
+          {!isIndependent && (
+            <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); navigation.navigate('ServiceSelection' as never); }}>
+              <Text style={styles.drawerItemText}>🏢 Services</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.drawerItem} onPress={handleLogout}>
             <Text style={[styles.drawerItemText, {color: '#E31837'}]}>🚪 Déconnexion</Text>
           </TouchableOpacity>
@@ -213,27 +233,24 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Mes Commandes</Text>
           <Text style={styles.headerSubtitle}>
-            {profile ? `${profile.first_name} ${profile.last_name}` : 'Chargement...'}
+            {profile ? profile.name : 'Chargement...'}
           </Text>
-          {/* Affichage du service business */}
-          {!isIndependent && businessServiceName && (
+          {/* Affichage du statut du chauffeur */}
+          {isIndependent ? (
+            <View style={styles.independentBadge}>
+              <MaterialIcons name="person" size={16} color={WHITE} />
+              <Text style={styles.independentBadgeText}>Chauffeur Indépendant</Text>
+            </View>
+          ) : businessServiceName ? (
             <View style={styles.serviceBadge}>
               <MaterialIcons 
-                name={serviceType === 'pharmacy' ? 'local-pharmacy' : 
-                      serviceType === 'restaurant' ? 'restaurant' : 
-                      serviceType === 'grocery' ? 'shopping-cart' : 'business'} 
+                name={getServiceIcon(serviceType)} 
                 size={16} 
                 color={WHITE} 
               />
               <Text style={styles.serviceBadgeText}>{businessServiceName}</Text>
             </View>
-          )}
-          {isIndependent && (
-            <View style={styles.independentBadge}>
-              <MaterialIcons name="person" size={16} color={PRIMARY} />
-              <Text style={styles.independentBadgeText}>Indépendant</Text>
-            </View>
-          )}
+          ) : null}
         </View>
         <TouchableOpacity style={styles.notificationButton}>
           <MaterialIcons name="notifications" size={24} color={DARK_TEXT} />
@@ -245,19 +262,19 @@ export const HomeScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Service Management (pour les chauffeurs indépendants) */}
+      {/* Statut Indépendant (pour les chauffeurs indépendants) */}
       {isIndependent && (
         <View style={styles.serviceManagementContainer}>
-          <Text style={styles.serviceManagementTitle}>Gestion du Service</Text>
-          <TouchableOpacity 
-            style={styles.serviceManagementButton}
-            onPress={() => {
-              navigation.navigate('ServiceSelection' as never);
-            }}
-          >
-            <MaterialIcons name="business" size={20} color={WHITE} />
-            <Text style={styles.serviceManagementButtonText}>Rejoindre un Service</Text>
-          </TouchableOpacity>
+          <Text style={styles.serviceManagementTitle}>Statut Indépendant</Text>
+          <View style={styles.independentStatusContainer}>
+            <MaterialIcons name="person" size={24} color="#10B981" />
+            <Text style={styles.independentStatusText}>
+              Vous travaillez en tant que chauffeur indépendant
+            </Text>
+          </View>
+          <Text style={styles.independentStatusSubtext}>
+            Vous pouvez accepter des commandes de tous les services disponibles
+          </Text>
         </View>
       )}
 
@@ -266,9 +283,7 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.serviceInfoContainer}>
           <View style={styles.serviceInfoHeader}>
             <MaterialIcons 
-              name={serviceType === 'pharmacy' ? 'local-pharmacy' : 
-                    serviceType === 'restaurant' ? 'restaurant' : 
-                    serviceType === 'grocery' ? 'shopping-cart' : 'business'} 
+              name={getServiceIcon(serviceType)} 
               size={24} 
               color={PRIMARY} 
             />
@@ -286,8 +301,8 @@ export const HomeScreen: React.FC = () => {
                     text: 'Quitter', 
                     style: 'destructive',
                     onPress: async () => {
-                      const success = await removeFromBusinessService();
-                      if (success) {
+                      const { error } = await removeFromBusinessService();
+                      if (!error) {
                         Alert.alert('Succès', 'Vous êtes maintenant indépendant');
                       } else {
                         Alert.alert('Erreur', 'Impossible de quitter le service');
@@ -359,7 +374,7 @@ export const HomeScreen: React.FC = () => {
               <View style={styles.orderHeader}>
                 <View style={styles.orderIdContainer}>
                   <MaterialIcons name="receipt" size={16} color={PRIMARY} />
-                  <Text style={styles.orderId}>#{order.id.slice(-6)}</Text>
+                  <Text style={styles.orderId}>#{order.order?.order_number || order.order_id}</Text>
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[order.status as keyof typeof STATUS_COLORS] || GRAY_500 }]}>
                   <Text style={styles.statusText}>{translateStatus(order.status)}</Text>
@@ -369,12 +384,16 @@ export const HomeScreen: React.FC = () => {
               <View style={styles.orderContent}>
                 <View style={styles.businessInfo}>
                   <MaterialIcons name="store" size={18} color={PRIMARY} />
-                  <Text style={styles.businessName}>{order.business_name}</Text>
+                  <Text style={styles.businessName}>
+                    {order.order?.business?.name || 'Restaurant'}
+                  </Text>
                 </View>
                 
                 <View style={styles.customerInfo}>
                   <MaterialIcons name="person" size={16} color={DARK_GRAY} />
-                  <Text style={styles.customerName}>{order.customer_name}</Text>
+                  <Text style={styles.customerName}>
+                    {order.order?.user?.name || 'Client'}
+                  </Text>
                 </View>
               </View>
               
@@ -389,8 +408,8 @@ export const HomeScreen: React.FC = () => {
                   </Text>
                 </View>
                 <View style={styles.amountInfo}>
-                  <Text style={styles.amountLabel}>Total</Text>
-                  <Text style={styles.orderAmount}>€{order.total_amount.toFixed(2)}</Text>
+                  <Text style={styles.amountLabel}>Gains</Text>
+                  <Text style={styles.orderAmount}>{order.driver_earnings.toLocaleString('fr-FR')} GNF</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -858,29 +877,33 @@ const styles = StyleSheet.create({
 
   serviceBadge: {
     backgroundColor: PRIMARY,
-    borderRadius: 8,
-    padding: 4,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 6,
+    alignSelf: 'center',
   },
   serviceBadgeText: {
     color: WHITE,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     marginLeft: 4,
   },
   independentBadge: {
-    backgroundColor: PRIMARY,
-    borderRadius: 8,
-    padding: 4,
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 6,
+    alignSelf: 'center',
   },
   independentBadgeText: {
     color: WHITE,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     marginLeft: 4,
   },
@@ -910,6 +933,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginLeft: 8,
+  },
+  independentStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  independentStatusText: {
+    color: DARK_TEXT,
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 12,
+    flex: 1,
+  },
+  independentStatusSubtext: {
+    color: GRAY_500,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   serviceInfoContainer: {
     padding: 16,

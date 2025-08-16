@@ -28,8 +28,8 @@ const DARK_HEADER = '#23262F';
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { signIn } = useAuth();
-  const [email, setEmail] = useState('chauffeur@braprime.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('drivermobile@gmail.com');
+  const [password, setPassword] = useState('1234567890');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [focus, setFocus] = useState<'email' | 'password' | null>(null);
