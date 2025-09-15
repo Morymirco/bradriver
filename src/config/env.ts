@@ -12,6 +12,19 @@ export const SUPABASE_CONFIG = {
   SERVICE_ROLE_KEY: 'VOTRE_CLE_SERVICE_SUPABASE', // À configurer si nécessaire
 };
 
+// Configuration de l'API backend
+export const API_CONFIG = {
+  // URL de l'API backend pour les notifications email
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001',
+  
+  // Endpoints pour les notifications
+  ENDPOINTS: {
+    DRIVER_NOTIFICATION: '/api/emails/driver-notification',
+    ORDER_UPDATE: '/api/orders/update',
+    PAYMENT_NOTIFICATION: '/api/payments/notification',
+  },
+};
+
 // Configuration de l'application
 export const APP_CONFIG = {
   // Nom de l'application

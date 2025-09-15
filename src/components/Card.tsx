@@ -1,9 +1,9 @@
 import React from 'react';
 import {
-  View,
-  StyleSheet,
-  ViewStyle,
-  TouchableOpacity,
+    StyleSheet,
+    TouchableOpacity,
+    View,
+    ViewStyle,
 } from 'react-native';
 import { colors, spacing } from '../theme';
 

@@ -29,39 +29,56 @@ interface HistoryItem {
   order_number?: string;
 }
 
+// Configuration uniformisée des couleurs de statuts
 const STATUS_COLORS = { 
-  'Livrée': '#10B981', 
-  'Annulée': '#EF4444',
-  'En cours': '#F59E0B',
-  'pending': '#F59E0B',
-  'confirmed': '#3B82F6',
-  'preparing': '#F59E0B',
-  'ready': '#10B981',
-  'picked_up': '#8B5CF6',
-  'delivered': '#10B981',
-  'cancelled': '#EF4444',
+  // Statuts en anglais
+  'pending': '#F59E0B',      // Orange/Ambre
+  'confirmed': '#3B82F6',    // Bleu
+  'preparing': '#F59E0B',    // Orange/Ambre
+  'ready': '#10B981',        // Vert
+  'picked_up': '#8B5CF6',    // Violet
+  'out_for_delivery': '#FF9800', // Orange vif
+  'delivered': '#10B981',    // Vert
+  'cancelled': '#EF4444',    // Rouge
+  
+  // Statuts traduits en français
   'En attente': '#F59E0B',
   'Confirmée': '#3B82F6',
   'En préparation': '#F59E0B',
   'Prête': '#10B981',
+  'Récupérée': '#8B5CF6',
+  'En livraison': '#FF9800',
+  'Livrée': '#10B981',
+  'Annulée': '#EF4444',
+  
+  // Anciens statuts pour compatibilité
+  'En cours': '#F59E0B',
   'En route': '#8B5CF6',
 };
 
 const STATUS_ICONS = {
-  'Livrée': 'check-circle',
-  'Annulée': 'cancel',
-  'En cours': 'directions-run',
+  // Statuts en anglais
   'pending': 'schedule',
   'confirmed': 'check-circle-outline',
   'preparing': 'restaurant',
   'ready': 'local-shipping',
   'picked_up': 'directions-car',
+  'out_for_delivery': 'local-shipping',
   'delivered': 'check-circle',
   'cancelled': 'cancel',
+  
+  // Statuts traduits en français
   'En attente': 'schedule',
   'Confirmée': 'check-circle-outline',
   'En préparation': 'restaurant',
   'Prête': 'local-shipping',
+  'Récupérée': 'directions-car',
+  'En livraison': 'local-shipping',
+  'Livrée': 'check-circle',
+  'Annulée': 'cancel',
+  
+  // Anciens statuts pour compatibilité
+  'En cours': 'directions-run',
   'En route': 'directions-car',
 };
 
@@ -111,9 +128,9 @@ export const HistoryScreen: React.FC = () => {
           `${item.quantity || 1}x ${item.name || 'Article'}`
         ).join(', ') || 'Aucun détail disponible';
 
-        // Calculer les gains (15% du total)
+        // Calculer les gains (40% des frais de livraison)
         const earnings = order.status === 'delivered' 
-          ? Math.round((order.order?.grand_total || 0) * 0.15)
+          ? Math.round((order.order?.delivery_fee || 0) * 0.40)
           : 0;
 
                  return {
@@ -146,6 +163,7 @@ export const HistoryScreen: React.FC = () => {
       case 'preparing': return 'En préparation';
       case 'ready': return 'Prête';
       case 'picked_up': return 'En route';
+      case 'out_for_delivery': return 'En livraison';
       case 'delivered': return 'Livrée';
       case 'cancelled': return 'Annulée';
       default: return status;
@@ -235,7 +253,7 @@ export const HistoryScreen: React.FC = () => {
             <TouchableOpacity 
               key={item.id} 
               style={[styles.card, idx < filteredHistory.length - 1 && styles.cardMargin]}
-              onPress={() => navigation.navigate('OrderDetail', { orderId: item.id })}
+              onPress={() => navigation.navigate('OrderDetail', { orderId: item.order_id || item.order?.id || item.id })}
               activeOpacity={0.85}
             >
               <View style={styles.cardHeader}>

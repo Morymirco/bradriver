@@ -292,18 +292,21 @@ export class DriverAuthService {
 
       console.log('✅ Driver trouvé par ID:', driver.name);
 
-      // Calculer les statistiques du driver
-      const { data: driverStats, error: statsError } = await supabase
-        .from('driver_orders')
+      // Récupérer les commandes assignées au driver
+      const { data: driverOrders, error: ordersError } = await supabase
+        .from('orders')
         .select(`
           id,
-          driver_earnings,
-          status
+          order_number,
+          status,
+          delivery_fee,
+          created_at
         `)
-        .eq('driver_id', authUserId);
+        .eq('driver_id', driver.id)
+        .order('created_at', { ascending: false });
 
-      const totalDeliveries = driverStats?.filter(order => order.status === 'delivered').length || 0;
-      const totalEarnings = driverStats?.reduce((sum, order) => sum + (order.driver_earnings || 0), 0) || 0;
+      const totalDeliveries = driverOrders?.filter(order => order.status === 'delivered').length || 0;
+      const totalEarnings = driverOrders?.reduce((sum, order) => sum + Math.round((order.delivery_fee || 0) * 0.40), 0) || 0;
 
       // Compter les documents
       const { count: documentsCount } = await supabase

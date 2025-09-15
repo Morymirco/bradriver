@@ -11,6 +11,7 @@ const RED = '#E31837';
 const DARK_HEADER = '#23262F';
 const DARK_GRAY = '#6B7280';
 const LIGHT_GRAY = '#9CA3AF';
+const WHITE = '#FFFFFF';
 
 // Types pour la navigation
 export type OrderDetailParamList = {
@@ -21,21 +22,31 @@ export type OrderDetailParamList = {
 
 type OrderDetailRouteProp = RouteProp<OrderDetailParamList, 'OrderDetail'>;
 
+// Configuration uniformisée des couleurs de statuts
 const STATUS_COLORS = {
-  'pending': '#F59E0B',
-  'confirmed': '#3B82F6',
-  'preparing': '#F59E0B',
-  'ready': '#10B981',
-  'picked_up': '#8B5CF6',
-  'out_for_delivery': '#8B5CF6',
-  'delivered': '#10B981',
-  'cancelled': '#EF4444',
-  'Commande reçue': '#3B82F6',
+  // Statuts en anglais
+  'pending': '#F59E0B',      // Orange/Ambre
+  'confirmed': '#3B82F6',    // Bleu
+  'preparing': '#F59E0B',    // Orange/Ambre
+  'ready': '#10B981',        // Vert
+  'picked_up': '#8B5CF6',    // Violet
+  'out_for_delivery': '#FF9800', // Orange vif
+  'delivered': '#10B981',    // Vert
+  'cancelled': '#EF4444',    // Rouge
+  
+  // Statuts traduits en français
+  'En attente': '#F59E0B',
+  'Confirmée': '#3B82F6',
   'En préparation': '#F59E0B',
-  'Prête pour livraison': '#10B981',
-  'En livraison': '#8B5CF6',
+  'Prête': '#10B981',
+  'Récupérée': '#8B5CF6',
+  'En livraison': '#FF9800',
   'Livrée': '#10B981',
   'Annulée': '#EF4444',
+  
+  // Anciens statuts pour compatibilité
+  'Commande reçue': '#3B82F6',
+  'Prête pour livraison': '#10B981',
 };
 
 export const OrderDetailScreen: React.FC = () => {
@@ -57,13 +68,17 @@ export const OrderDetailScreen: React.FC = () => {
       setLoading(true);
       setError(null);
       
+      console.log('🔍 Chargement des détails pour orderId:', route.params.orderId);
+      
       const { order: orderData, error: orderError } = await DriverDashboardService.getOrderDetails(route.params.orderId);
       
       if (orderError) {
+        console.error('❌ Erreur lors du chargement:', orderError);
         setError(orderError);
         return;
       }
       
+      console.log('✅ Données reçues:', JSON.stringify(orderData, null, 2));
       setOrder(orderData);
     } catch (error) {
       console.error('Erreur lors du chargement des détails:', error);
@@ -104,12 +119,45 @@ export const OrderDetailScreen: React.FC = () => {
       case 'confirmed': return 'Confirmée';
       case 'preparing': return 'En préparation';
       case 'ready': return 'Prête';
-      case 'picked_up': return 'En route';
+      case 'picked_up': return 'Récupérée';
       case 'out_for_delivery': return 'En livraison';
       case 'delivered': return 'Livrée';
       case 'cancelled': return 'Annulée';
       default: return status;
     }
+  };
+
+  // Fonction pour détecter si c'est une commande de colis
+  const isPackageOrder = () => {
+    // Vérifier plusieurs indicateurs pour détecter une commande de colis
+    const hasPackageOrders = order?.order?.package_orders && order.order.package_orders.length > 0;
+    const hasPackageInstructions = order?.customer_instructions?.includes('Service de colis') || 
+                                  order?.delivery_instructions?.includes('Service de colis') ||
+                                  order?.customer_instructions?.includes('Colis Léger');
+    const hasPackageOrderId = order?.customer_instructions?.includes('package_order_id');
+    const isPackageOrder = hasPackageOrders || hasPackageInstructions || hasPackageOrderId;
+    
+    console.log('📦 Détection commande de colis:', {
+      hasPackageOrders,
+      hasPackageInstructions,
+      hasPackageOrderId,
+      isPackageOrder,
+      customerInstructions: order?.customer_instructions,
+      deliveryInstructions: order?.delivery_instructions,
+      packageOrders: order?.order?.package_orders,
+      orderData: order
+    });
+    return isPackageOrder;
+  };
+
+  // Fonction pour obtenir le titre de la section selon le type de commande
+  const getItemsSectionTitle = () => {
+    return isPackageOrder() ? 'Détails du colis' : 'Articles commandés';
+  };
+
+  // Fonction pour obtenir l'icône de la section selon le type de commande
+  const getItemsSectionIcon = () => {
+    return isPackageOrder() ? 'inventory' : 'receipt';
   };
 
   const handleUpdateStatus = async (newStatus: string) => {
@@ -248,28 +296,42 @@ export const OrderDetailScreen: React.FC = () => {
           <Text style={styles.orderId}>Commande #{order.order?.order_number || order.id}</Text>
         </View>
 
-        {/* Restaurant Info */}
+        {/* Restaurant/Service Info */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <MaterialIcons name="restaurant" size={20} color={RED} />
-            <Text style={styles.sectionTitle}>Restaurant</Text>
+            <MaterialIcons 
+              name={isPackageOrder() ? "local-shipping" : "restaurant"} 
+              size={20} 
+              color={RED} 
+            />
+            <Text style={styles.sectionTitle}>
+              {isPackageOrder() ? 'Service de Colis' : 'Restaurant'}
+            </Text>
           </View>
           <View style={styles.infoCard}>
-                         <Text style={styles.restaurantName}>{order.order?.business?.name || 'Restaurant'}</Text>
-             <Text style={styles.address}>{order.order?.business?.address || 'Adresse non disponible'}</Text>
+            <View style={styles.serviceHeader}>
+              <View style={styles.serviceInfo}>
+                <Text style={styles.serviceName}>
+                  {order.order?.business?.name || (isPackageOrder() ? 'Service de Colis' : 'Restaurant')}
+                </Text>
+                <Text style={styles.serviceAddress}>{order.order?.business?.address || 'Adresse non disponible'}</Text>
              {order.order?.business?.phone && (
-               <Text style={styles.phoneNumber}>{order.order.business.phone}</Text>
-             )}
-             {order.order?.business?.rating && (
-             <View style={styles.ratingContainer}>
-               <MaterialIcons name="star" size={16} color="#F59E0B" />
-                 <Text style={styles.rating}>{order.order.business.rating}</Text>
+                  <Text style={styles.servicePhone}>{order.order.business.phone}</Text>
+                )}
+              </View>
+              {order.order?.business?.rating && !isPackageOrder() && (
+                <View style={styles.ratingBadge}>
+                  <MaterialIcons name="star" size={14} color="#F59E0B" />
+                  <Text style={styles.ratingText}>{order.order.business.rating}</Text>
              </View>
              )}
+            </View>
              {order.order?.business?.phone && (
-             <TouchableOpacity style={styles.callBtn} onPress={handleCallRestaurant}>
-               <MaterialIcons name="phone" size={18} color={RED} />
-               <Text style={styles.callBtnText}>Appeler le restaurant</Text>
+              <TouchableOpacity style={styles.callButton} onPress={handleCallRestaurant}>
+                <MaterialIcons name="phone" size={18} color={WHITE} />
+                <Text style={styles.callButtonText}>
+                  {isPackageOrder() ? 'Appeler le service' : 'Appeler le restaurant'}
+                </Text>
              </TouchableOpacity>
              )}
           </View>
@@ -282,17 +344,24 @@ export const OrderDetailScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>Client</Text>
           </View>
           <View style={styles.infoCard}>
+            <View style={styles.clientHeader}>
+              <View style={styles.clientInfo}>
                          <Text style={styles.clientName}>{order.order?.user?.name || 'Client'}</Text>
              {order.order?.user?.phone_number && (
-               <Text style={styles.phoneNumber}>{order.order.user.phone_number}</Text>
+                  <Text style={styles.clientPhone}>{order.order.user.phone_number}</Text>
              )}
              {order.order?.user?.email && (
-               <Text style={styles.clientInfo}>{order.order.user.email}</Text>
+                  <Text style={styles.clientEmail}>{order.order.user.email}</Text>
              )}
+              </View>
+              <View style={styles.clientAvatar}>
+                <MaterialIcons name="person" size={24} color={DARK_GRAY} />
+              </View>
+            </View>
              {order.order?.user?.phone_number && (
-             <TouchableOpacity style={styles.callBtn} onPress={handleCallClient}>
-               <MaterialIcons name="phone" size={18} color={RED} />
-               <Text style={styles.callBtnText}>Appeler le client</Text>
+              <TouchableOpacity style={styles.callButton} onPress={handleCallClient}>
+                <MaterialIcons name="phone" size={18} color={WHITE} />
+                <Text style={styles.callButtonText}>Appeler le client</Text>
              </TouchableOpacity>
              )}
           </View>
@@ -302,48 +371,351 @@ export const OrderDetailScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <MaterialIcons name="local-shipping" size={20} color={RED} />
-            <Text style={styles.sectionTitle}>Livraison</Text>
+            <Text style={styles.sectionTitle}>
+              {isPackageOrder() ? 'Informations de livraison de colis' : 'Livraison'}
+            </Text>
           </View>
           <View style={styles.infoCard}>
-            <View style={styles.addressContainer}>
-              <View style={styles.addressItem}>
-                <MaterialIcons name="location-on" size={16} color="#10B981" />
-                <View style={styles.addressText}>
-                  <Text style={styles.addressLabel}>Point de retrait</Text>
-                  <Text style={styles.address}>{order.order?.business?.address || 'Adresse non disponible'}</Text>
+            <View style={styles.deliveryRoutes}>
+              <View style={styles.routeItem}>
+                <View style={styles.routeIcon}>
+                  <MaterialIcons name="location-on" size={20} color="#3B82F6" />
                 </View>
+                <View style={styles.routeInfo}>
+                  <Text style={styles.routeLabel}>
+                    {isPackageOrder() ? 'Point de collecte' : 'Point de retrait'}
+                  </Text>
+                  <Text style={styles.routeAddress}>
+                    {isPackageOrder() 
+                      ? (order.pickup_address || order.order?.business?.address || 'Adresse non disponible')
+                      : (order.order?.business?.address || 'Adresse non disponible')
+                    }
+                  </Text>
               </View>
-              <View style={styles.addressDivider} />
-              <View style={styles.addressItem}>
-                <MaterialIcons name="home" size={16} color={RED} />
-                <View style={styles.addressText}>
-                  <Text style={styles.addressLabel}>Adresse de livraison</Text>
-                  <Text style={styles.address}>{order.delivery_address || 'Adresse non disponible'}</Text>
                 </View>
+              
+              <View style={styles.routeArrow}>
+                <MaterialIcons name="keyboard-arrow-down" size={24} color={DARK_GRAY} />
+              </View>
+              
+              <View style={styles.routeItem}>
+                <View style={styles.routeIcon}>
+                  <MaterialIcons name="home" size={20} color={RED} />
+            </View>
+                <View style={styles.routeInfo}>
+                  <Text style={styles.routeLabel}>Adresse de livraison</Text>
+                  <Text style={styles.routeAddress}>
+                    {isPackageOrder()
+                      ? (order.delivery_address || 'Adresse non disponible')
+                      : (order.delivery_address || 'Adresse non disponible')
+                    }
+                  </Text>
+              </View>
               </View>
             </View>
-            <View style={styles.deliveryStats}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{order.estimated_distance || 'N/A'} km</Text>
-                <Text style={styles.statLabel}>Distance</Text>
+            
+            {/* Instructions spécifiques pour les colis */}
+            {isPackageOrder() && (
+              <View style={styles.deliveryInstructions}>
+                {order.customer_instructions && (
+                  <View style={styles.instructionBadge}>
+                    <MaterialIcons name="upload" size={16} color="#3B82F6" />
+                    <Text style={styles.instructionText}>
+                      Collecte: {order.customer_instructions}
+                    </Text>
+          </View>
+                )}
+                {order.delivery_instructions && (
+                  <View style={styles.instructionBadge}>
+                    <MaterialIcons name="download" size={16} color="#10B981" />
+                    <Text style={styles.instructionText}>
+                      Livraison: {order.delivery_instructions}
+                    </Text>
+        </View>
+                )}
               </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{order.estimated_duration || 'N/A'} min</Text>
-                <Text style={styles.statLabel}>Temps estimé</Text>
+            )}
+            
+            <View style={styles.deliveryMetrics}>
+              <View style={styles.metricCard}>
+                <MaterialIcons name="straighten" size={20} color="#3B82F6" />
+                <Text style={styles.metricValue}>{order.estimated_distance || 'N/A'} km</Text>
+                <Text style={styles.metricLabel}>Distance</Text>
+              </View>
+              <View style={styles.metricCard}>
+                <MaterialIcons name="schedule" size={20} color="#F59E0B" />
+                <Text style={styles.metricValue}>{order.estimated_duration || 'N/A'} min</Text>
+                <Text style={styles.metricLabel}>Temps estimé</Text>
               </View>
             </View>
           </View>
         </View>
 
-        {/* Order Items */}
+        {/* Order Items / Package Details */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <MaterialIcons name="receipt" size={20} color={RED} />
-            <Text style={styles.sectionTitle}>Articles commandés</Text>
+            <MaterialIcons name={getItemsSectionIcon()} size={20} color={RED} />
+            <Text style={styles.sectionTitle}>{getItemsSectionTitle()}</Text>
           </View>
           <View style={styles.infoCard}>
-            {order.order?.items && order.order.items.length > 0 ? (
+            {isPackageOrder() ? (
+              // Affichage amélioré pour les commandes de colis
+              <View style={styles.packageDetails}>
+                                 {/* En-tête du colis */}
+                 <View style={styles.packageHeader}>
+                   <View style={styles.packageTypeContainer}>
+                     <MaterialIcons name="inventory" size={24} color="#3B82F6" />
+                     <View style={styles.packageTypeInfo}>
+                                               <Text style={styles.packageTypeTitle}>
+                          {order.order?.package_orders?.[0]?.service_name || 'Service de Colis'}
+                        </Text>
+                       <Text style={styles.packageTypeSubtitle}>
+                         {order.order?.package_orders?.[0]?.package_weight ? 
+                           `Poids: ${order.order.package_orders[0].package_weight} kg` : 
+                           'Livraison spécialisée'
+                         }
+                       </Text>
+                     </View>
+                   </View>
+                   <View style={[styles.packageStatusBadge, { backgroundColor: '#3B82F6' + '20' }]}>
+                     <Text style={[styles.packageStatusText, { color: '#3B82F6' }]}>En cours</Text>
+                   </View>
+                 </View>
+
+                                                   {/* Informations du destinataire */}
+                  {(order.order?.package_orders?.[0]?.customer_name || 
+                    order.order?.package_orders?.[0]?.recipient_name) && (
+                    <View style={styles.packageSection}>
+                      <View style={styles.packageSectionHeader}>
+                        <MaterialIcons name="person" size={18} color="#10B981" />
+                        <Text style={styles.packageSectionTitle}>Destinataire</Text>
+                      </View>
+                      <View style={styles.packageSectionContent}>
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>Nom:</Text>
+                          <Text style={styles.infoValue}>
+                            {order.order.package_orders[0].customer_name || order.order.package_orders[0].recipient_name}
+                          </Text>
+                        </View>
+                        {(order.order.package_orders[0].customer_phone || order.order.package_orders[0].recipient_phone) && (
+                          <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Téléphone:</Text>
+                            <Text style={styles.infoValue}>
+                              {order.order.package_orders[0].customer_phone || order.order.package_orders[0].recipient_phone}
+                            </Text>
+                          </View>
+                        )}
+                        {order.order.package_orders[0].customer_email && (
+                          <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Email:</Text>
+                            <Text style={styles.infoValue}>{order.order.package_orders[0].customer_email}</Text>
+                          </View>
+                        )}
+                        {order.order.package_orders[0].contact_method && (
+                          <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Contact préféré:</Text>
+                            <Text style={styles.infoValue}>
+                              {order.order.package_orders[0].contact_method === 'phone' ? 'Téléphone' : 
+                               order.order.package_orders[0].contact_method === 'email' ? 'Email' : 'Téléphone et Email'}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
+                                                   {/* Horaires de service */}
+                  {(order.order?.package_orders?.[0]?.pickup_date || order.order?.package_orders?.[0]?.drop_date || 
+                    order.order?.package_orders?.[0]?.preferred_time) && (
+                    <View style={styles.packageSection}>
+                      <View style={styles.packageSectionHeader}>
+                        <MaterialIcons name="schedule" size={18} color="#F59E0B" />
+                        <Text style={styles.packageSectionTitle}>Horaires de Service</Text>
+                      </View>
+                      <View style={styles.packageSectionContent}>
+                        {order.order.package_orders[0].pickup_date && (
+                          <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Collecte:</Text>
+                            <Text style={styles.infoValue}>
+                              {order.order.package_orders[0].pickup_date}
+                              {order.order.package_orders[0].pickup_time && ` à ${order.order.package_orders[0].pickup_time}`}
+                            </Text>
+                          </View>
+                        )}
+                        {order.order.package_orders[0].drop_date && (
+                          <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Livraison:</Text>
+                            <Text style={styles.infoValue}>
+                              {order.order.package_orders[0].drop_date}
+                              {order.order.package_orders[0].drop_time && ` à ${order.order.package_orders[0].drop_time}`}
+                            </Text>
+                          </View>
+                        )}
+                        {order.order.package_orders[0].preferred_time && (
+                          <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Heure préférée:</Text>
+                            <Text style={styles.infoValue}>{order.order.package_orders[0].preferred_time}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
+                                 {/* Adresses spécifiques aux colis */}
+                 {(order.order?.package_orders?.[0]?.pickup_address || order.order?.package_orders?.[0]?.delivery_address) && (
+                   <View style={styles.packageSection}>
+                     <View style={styles.packageSectionHeader}>
+                       <MaterialIcons name="location-on" size={18} color="#3B82F6" />
+                       <Text style={styles.packageSectionTitle}>Adresses de Service</Text>
+                     </View>
+                     <View style={styles.packageSectionContent}>
+                       {order.order.package_orders[0].pickup_address && (
+                         <View style={styles.instructionItem}>
+                           <MaterialIcons name="upload" size={16} color="#3B82F6" />
+                           <Text style={styles.instructionText}>
+                             <Text style={styles.instructionLabel}>Point de collecte: </Text>
+                             {order.order.package_orders[0].pickup_address}
+                           </Text>
+                         </View>
+                       )}
+                       {order.order.package_orders[0].delivery_address && (
+                         <View style={styles.instructionItem}>
+                           <MaterialIcons name="download" size={16} color="#10B981" />
+                           <Text style={styles.instructionText}>
+                             <Text style={styles.instructionLabel}>Point de livraison: </Text>
+                             {order.order.package_orders[0].delivery_address}
+                           </Text>
+                         </View>
+                       )}
+                     </View>
+                   </View>
+                 )}
+
+                 {/* Instructions spéciales */}
+                 {(order.customer_instructions || order.delivery_instructions || 
+                   order.order?.package_orders?.[0]?.pickup_instructions || 
+                   order.order?.package_orders?.[0]?.delivery_instructions) && (
+                   <View style={styles.packageSection}>
+                     <View style={styles.packageSectionHeader}>
+                       <MaterialIcons name="info" size={18} color="#8B5CF6" />
+                       <Text style={styles.packageSectionTitle}>Instructions Spéciales</Text>
+                     </View>
+                     <View style={styles.packageSectionContent}>
+                       {(order.customer_instructions || order.order?.package_orders?.[0]?.pickup_instructions) && (
+                         <View style={styles.instructionItem}>
+                           <MaterialIcons name="upload" size={16} color="#3B82F6" />
+                           <Text style={styles.instructionText}>
+                             <Text style={styles.instructionLabel}>Collecte: </Text>
+                             {order.order?.package_orders?.[0]?.pickup_instructions || order.customer_instructions}
+                           </Text>
+                         </View>
+                       )}
+                       {(order.delivery_instructions || order.order?.package_orders?.[0]?.delivery_instructions) && (
+                         <View style={styles.instructionItem}>
+                           <MaterialIcons name="download" size={16} color="#10B981" />
+                           <Text style={styles.instructionText}>
+                             <Text style={styles.instructionLabel}>Livraison: </Text>
+                             {order.order?.package_orders?.[0]?.delivery_instructions || order.delivery_instructions}
+                           </Text>
+                         </View>
+                       )}
+                     </View>
+                   </View>
+                 )}
+
+                                                   {/* Caractéristiques du colis */}
+                  <View style={styles.packageSection}>
+                    <View style={styles.packageSectionHeader}>
+                      <MaterialIcons name="straighten" size={18} color="#EF4444" />
+                      <Text style={styles.packageSectionTitle}>Caractéristiques</Text>
+                    </View>
+                    <View style={styles.packageSectionContent}>
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Distance:</Text>
+                        <Text style={styles.infoValue}>{order.estimated_distance || 'N/A'} km</Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Durée:</Text>
+                        <Text style={styles.infoValue}>{order.estimated_duration || 'N/A'} min</Text>
+                      </View>
+                      {order.order?.package_orders?.[0]?.package_weight && (
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>Poids:</Text>
+                          <Text style={styles.infoValue}>{order.order.package_orders[0].package_weight} kg</Text>
+                        </View>
+                      )}
+                      {order.order?.package_orders?.[0]?.package_dimensions && (
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>Dimensions:</Text>
+                          <Text style={styles.infoValue}>{order.order.package_orders[0].package_dimensions} cm</Text>
+                        </View>
+                      )}
+                      {order.order?.package_orders?.[0]?.service_name && (
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>Service:</Text>
+                          <Text style={styles.infoValue}>{order.order.package_orders[0].service_name}</Text>
+                        </View>
+                      )}
+                      {order.order?.package_orders?.[0]?.package_description && (
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>Description:</Text>
+                          <Text style={styles.infoValue}>{order.order.package_orders[0].package_description}</Text>
+                        </View>
+                      )}
+                      {order.order?.package_orders?.[0]?.service_price && (
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>Prix service:</Text>
+                          <Text style={styles.infoValue}>{order.order.package_orders[0].service_price.toLocaleString('fr-FR')} GNF</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                                                   {/* Options de service */}
+                  {(order.order?.package_orders?.[0]?.is_fragile || 
+                    order.order?.package_orders?.[0]?.is_urgent) && (
+                    <View style={styles.packageSection}>
+                      <View style={styles.packageSectionHeader}>
+                        <MaterialIcons name="settings" size={18} color="#8B5CF6" />
+                        <Text style={styles.packageSectionTitle}>Options de Service</Text>
+                      </View>
+                      <View style={styles.packageSectionContent}>
+                        {order.order?.package_orders?.[0]?.is_fragile && (
+                          <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Assurance:</Text>
+                            <Text style={[styles.infoValue, { color: '#EF4444', fontWeight: '600' }]}>Recommandée</Text>
+                          </View>
+                        )}
+                        {order.order?.package_orders?.[0]?.is_urgent && (
+                          <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Livraison:</Text>
+                            <Text style={[styles.infoValue, { color: '#F59E0B', fontWeight: '600' }]}>Express</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
+                 {/* Badges spéciaux */}
+                 <View style={styles.packageBadges}>
+                   {order.order?.package_orders?.[0]?.is_fragile && (
+                     <View style={[styles.specialBadge, { backgroundColor: '#EF4444' + '20' }]}>
+                       <MaterialIcons name="warning" size={14} color="#EF4444" />
+                       <Text style={[styles.specialBadgeText, { color: '#EF4444' }]}>Fragile</Text>
+                     </View>
+                   )}
+                   {order.order?.package_orders?.[0]?.is_urgent && (
+                     <View style={[styles.specialBadge, { backgroundColor: '#F59E0B' + '20' }]}>
+                       <MaterialIcons name="priority-high" size={14} color="#F59E0B" />
+                       <Text style={[styles.specialBadgeText, { color: '#F59E0B' }]}>Urgent</Text>
+                     </View>
+                   )}
+
+                 </View>
+              </View>
+            ) : (
+              // Affichage pour les commandes normales
+              order.order?.items && order.order.items.length > 0 ? (
               order.order.items.map((item: any, index: number) => (
                                  <View key={index} style={[styles.itemRow, index < order.order.items.length - 1 && styles.itemBorder]}>
                    {item.image && (
@@ -367,6 +739,7 @@ export const OrderDetailScreen: React.FC = () => {
               ))
             ) : (
               <Text style={styles.noItemsText}>Aucun article disponible</Text>
+              )
             )}
           </View>
         </View>
@@ -378,21 +751,36 @@ export const OrderDetailScreen: React.FC = () => {
             <Text style={styles.sectionTitle}>Paiement</Text>
           </View>
           <View style={styles.infoCard}>
-            <View style={styles.paymentRow}>
-              <Text style={styles.paymentLabel}>Méthode de paiement</Text>
-              <Text style={styles.paymentValue}>{order.order?.payment_method || 'Non spécifié'}</Text>
+             <View style={styles.paymentMethod}>
+               <MaterialIcons name="credit-card" size={20} color="#10B981" />
+               <Text style={styles.paymentMethodText}>
+                 {order.order?.payment_method === 'cash' ? 'Espèces' :
+                  order.order?.payment_method === 'card' ? 'Carte bancaire' :
+                  order.order?.payment_method === 'mobile_money' ? 'Mobile Money' :
+                  order.order?.payment_method || 'Non spécifié'}
+               </Text>
             </View>
-            <View style={styles.paymentRow}>
+             
+             <View style={styles.paymentBreakdown}>
+               <View style={styles.paymentItem}>
               <Text style={styles.paymentLabel}>Sous-total</Text>
               <Text style={styles.paymentValue}>{(order.order?.total || 0).toLocaleString('fr-FR')} GNF</Text>
             </View>
-            <View style={styles.paymentRow}>
+               <View style={styles.paymentItem}>
               <Text style={styles.paymentLabel}>Frais de livraison</Text>
               <Text style={styles.paymentValue}>{(order.order?.delivery_fee || 0).toLocaleString('fr-FR')} GNF</Text>
             </View>
-            <View style={[styles.paymentRow, styles.totalRow]}>
+               {order.order?.service_price && (
+                 <View style={styles.paymentItem}>
+                   <Text style={styles.paymentLabel}>Frais de service</Text>
+                   <Text style={styles.paymentValue}>{(order.order.service_price).toLocaleString('fr-FR')} GNF</Text>
+                 </View>
+               )}
+             </View>
+             
+             <View style={styles.paymentTotal}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>{(order.order?.grand_total || 0).toLocaleString('fr-FR')} GNF</Text>
+               <Text style={styles.totalValue}>{(order.order?.grand_total || order.order?.total || 0).toLocaleString('fr-FR')} GNF</Text>
             </View>
           </View>
         </View>
@@ -405,13 +793,14 @@ export const OrderDetailScreen: React.FC = () => {
           </View>
           <View style={styles.infoCard}>
             {order.timeline && order.timeline.length > 0 ? (
-              order.timeline.map((step: any, index: number) => (
-              <View key={index} style={styles.timelineItem}>
-                <View style={[styles.timelineIcon, step.active && styles.timelineIconActive]}>
+              <View style={styles.timelineContainer}>
+                {order.timeline.map((step: any, index: number) => (
+                  <View key={index} style={styles.timelineStep}>
+                    <View style={[styles.timelineDot, step.active && styles.timelineDotActive]}>
                   <MaterialIcons 
                     name={step.icon as any} 
                     size={16} 
-                    color={step.active ? RED : DARK_GRAY} 
+                        color={step.active ? WHITE : DARK_GRAY} 
                   />
                 </View>
                 <View style={styles.timelineContent}>
@@ -420,11 +809,17 @@ export const OrderDetailScreen: React.FC = () => {
                   </Text>
                   <Text style={styles.timelineTime}>{step.time}</Text>
                 </View>
-                {index < order.timeline.length - 1 && <View style={styles.timelineLine} />}
+                    {index < order.timeline.length - 1 && (
+                      <View style={[styles.timelineConnector, step.active && styles.timelineConnectorActive]} />
+                    )}
               </View>
-              ))
+                ))}
+              </View>
             ) : (
-              <Text style={styles.noTimelineText}>Aucun historique disponible</Text>
+              <View style={styles.emptyTimeline}>
+                <MaterialIcons name="schedule" size={48} color={DARK_GRAY} />
+                <Text style={styles.emptyTimelineText}>Aucun historique disponible</Text>
+              </View>
             )}
           </View>
         </View>
@@ -432,19 +827,19 @@ export const OrderDetailScreen: React.FC = () => {
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity 
-            style={[styles.actionBtn, styles.navigateBtn]}
-            onPress={() => navigation.navigate('Navigation' as never)}
+             style={[styles.actionButton, styles.navigateButton]}
+            onPress={() => navigation.navigate('Navigation', { orderId: order.id })}
           >
-            <MaterialIcons name="navigation" size={20} color={DARK_TEXT} />
-            <Text style={styles.actionBtnText}>Naviguer vers le client</Text>
+             <MaterialIcons name="navigation" size={16} color={WHITE} />
+             <Text style={styles.actionButtonText}>Naviguer</Text>
           </TouchableOpacity>
           {order.status !== 'delivered' && (
             <TouchableOpacity 
-              style={[styles.actionBtn, styles.primaryBtn]}
+               style={[styles.actionButton, styles.primaryButton]}
               onPress={handleCompleteOrder}
             >
-            <MaterialIcons name="check-circle" size={20} color={DARK_TEXT} />
-            <Text style={styles.actionBtnText}>Marquer comme livrée</Text>
+               <MaterialIcons name="check-circle" size={16} color={WHITE} />
+               <Text style={styles.actionButtonText}>Livrer</Text>
           </TouchableOpacity>
           )}
                  </View>
@@ -544,10 +939,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
   statusHeader: {
     flexDirection: 'row',
@@ -595,115 +990,191 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
-  restaurantName: {
-    fontSize: 16,
+  // Styles pour Service/Restaurant
+  serviceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  serviceInfo: {
+    flex: 1,
+  },
+  serviceName: {
+    fontSize: 18,
     fontWeight: '700',
     color: DARK_TEXT,
     marginBottom: 4,
   },
-  address: {
+  serviceAddress: {
     fontSize: 14,
     color: DARK_GRAY,
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  rating: {
+  servicePhone: {
     fontSize: 14,
-    color: DARK_TEXT,
-    marginLeft: 4,
+    color: RED,
     fontWeight: '600',
   },
-  callBtn: {
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F59E0B' + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F59E0B' + '50',
+  },
+  ratingText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#F59E0B',
+    marginLeft: 4,
+  },
+  callButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: RED,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: RED,
+  },
+  callButtonText: {
+    color: WHITE,
+    fontWeight: '700',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  // Styles pour Client
+  clientHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  clientInfo: {
+    flex: 1,
+  },
+  clientName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: DARK_TEXT,
+    marginBottom: 4,
+  },
+  clientPhone: {
+     fontSize: 14,
+    color: RED,
+    fontWeight: '600',
+     marginBottom: 4,
+   },
+  clientEmail: {
+     fontSize: 14,
+    color: DARK_GRAY,
+    marginBottom: 4,
+  },
+  clientAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: DARK_HEADER,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: DARK_GRAY + '30',
+  },
+  // Styles pour Livraison
+  deliveryRoutes: {
+    marginBottom: 20,
+  },
+  routeItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  routeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: DARK_HEADER,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderWidth: 2,
+    borderColor: DARK_GRAY + '30',
+  },
+  routeInfo: {
+    flex: 1,
+  },
+  routeLabel: {
+    fontSize: 12,
+    color: DARK_GRAY,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  routeAddress: {
+    fontSize: 14,
+    color: DARK_TEXT,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  routeArrow: {
+    alignItems: 'center',
+    marginVertical: 8,
+    marginLeft: 20,
+  },
+  deliveryInstructions: {
+    marginBottom: 20,
+  },
+  instructionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: DARK_HEADER,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    alignSelf: 'flex-start',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: DARK_GRAY + '30',
   },
-  callBtnText: {
-    color: RED,
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 6,
+  instructionText: {
+    fontSize: 13,
+    color: DARK_TEXT,
+    marginLeft: 8,
+    flex: 1,
   },
-  clientName: {
-    fontSize: 16,
+  deliveryMetrics: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: DARK_HEADER,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: DARK_GRAY + '30',
+  },
+  metricValue: {
+    fontSize: 18,
     fontWeight: '700',
     color: DARK_TEXT,
+    marginTop: 8,
     marginBottom: 4,
   },
-     clientInfo: {
-     fontSize: 14,
-     color: DARK_GRAY,
-     marginBottom: 4,
-   },
-   phoneNumber: {
-     fontSize: 14,
-     color: RED,
-     fontWeight: '600',
-     marginBottom: 8,
-   },
-  addressContainer: {
-    marginBottom: 16,
-  },
-  addressItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  addressText: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  addressLabel: {
+  metricLabel: {
     fontSize: 12,
     color: DARK_GRAY,
     fontWeight: '600',
-    marginBottom: 2,
-  },
-  addressDivider: {
-    height: 20,
-    width: 1,
-    backgroundColor: DARK_GRAY,
-    marginLeft: 8,
-    marginVertical: 4,
-  },
-  deliveryStats: {
-    flexDirection: 'row',
-    backgroundColor: DARK_HEADER,
-    borderRadius: 8,
-    padding: 12,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: RED,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: DARK_GRAY,
-    fontWeight: '600',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: DARK_GRAY,
-    marginHorizontal: 12,
   },
      itemRow: {
      flexDirection: 'row',
@@ -756,108 +1227,159 @@ const styles = StyleSheet.create({
     minWidth: 50,
     textAlign: 'right',
   },
-  paymentRow: {
+  // Styles pour Paiement
+  paymentMethod: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: DARK_HEADER,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: DARK_GRAY + '30',
+  },
+  paymentMethodText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: DARK_TEXT,
+    marginLeft: 12,
+  },
+  paymentBreakdown: {
+    marginBottom: 20,
+  },
+  paymentItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 8,
   },
   paymentLabel: {
     fontSize: 14,
     color: DARK_GRAY,
+    fontWeight: '500',
   },
   paymentValue: {
     fontSize: 14,
     fontWeight: '600',
     color: DARK_TEXT,
   },
-  totalRow: {
-    borderTopWidth: 1,
-    borderTopColor: DARK_GRAY,
-    paddingTop: 8,
+     paymentTotal: {
+     borderTopWidth: 2,
+     borderTopColor: DARK_GRAY + '50',
+     paddingTop: 16,
     marginTop: 8,
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'center',
   },
   totalLabel: {
-    fontSize: 16,
+     fontSize: 18,
     fontWeight: '700',
     color: DARK_TEXT,
   },
   totalValue: {
-    fontSize: 18,
+     fontSize: 20,
     fontWeight: '700',
     color: RED,
   },
-  timelineItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 16,
+  // Styles pour Timeline
+  timelineContainer: {
+    paddingLeft: 8,
   },
-  timelineIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  timelineStep: {
+    position: 'relative',
+    marginBottom: 20,
+  },
+  timelineDot: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: DARK_HEADER,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 16,
+    borderWidth: 2,
+    borderColor: DARK_GRAY + '50',
   },
-  timelineIconActive: {
-    backgroundColor: RED + '20',
+  timelineDotActive: {
+    backgroundColor: RED,
+    borderColor: RED,
   },
   timelineContent: {
     flex: 1,
+    paddingTop: 8,
   },
   timelineStatus: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: DARK_GRAY,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   timelineStatusActive: {
     color: DARK_TEXT,
   },
   timelineTime: {
-    fontSize: 12,
+    fontSize: 13,
     color: DARK_GRAY,
+    fontWeight: '500',
   },
-  timelineLine: {
+  timelineConnector: {
     position: 'absolute',
-    left: 16,
-    top: 32,
-    width: 1,
-    height: 16,
-    backgroundColor: DARK_GRAY,
+    left: 20,
+    top: 40,
+    width: 2,
+    height: 20,
+    backgroundColor: DARK_GRAY + '30',
   },
+  timelineConnectorActive: {
+    backgroundColor: RED + '50',
+  },
+  emptyTimeline: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  emptyTimelineText: {
+    color: DARK_GRAY,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  // Styles pour Actions
   actionButtons: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingBottom: 24,
     gap: 12,
   },
-  actionBtn: {
+  actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: DARK_CARD,
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: DARK_GRAY,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
-  navigateBtn: {
+  navigateButton: {
     backgroundColor: '#10B981',
     borderColor: '#10B981',
   },
-  primaryBtn: {
+  primaryButton: {
     backgroundColor: RED,
     borderColor: RED,
   },
-  actionBtnText: {
-    color: DARK_TEXT,
+  actionButtonText: {
+    color: WHITE,
     fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 6,
+    fontSize: 12,
+    marginLeft: 4,
   },
   loadingContainer: {
     flex: 1,
@@ -897,11 +1419,180 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-     noTimelineText: {
+     
+  // Styles pour les détails de colis améliorés
+  packageDetails: {
+    backgroundColor: DARK_CARD,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#3B82F6' + '30',
+  },
+  packageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: DARK_GRAY + '30',
+  },
+  packageTypeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  packageTypeInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  packageTypeTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: DARK_TEXT,
+    marginBottom: 2,
+  },
+  packageTypeSubtitle: {
+    fontSize: 14,
      color: DARK_GRAY,
+    fontWeight: '500',
+  },
+  packageStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#3B82F6' + '50',
+  },
+  packageStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  packageSection: {
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: DARK_GRAY + '20',
+  },
+  packageSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  packageSectionTitle: {
      fontSize: 16,
+    fontWeight: '700',
+    color: DARK_TEXT,
+    marginLeft: 8,
+  },
+     packageSectionContent: {
+     paddingLeft: 26,
+   },
+   infoRow: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'flex-start',
+     marginBottom: 8,
+     paddingVertical: 4,
+   },
+   infoLabel: {
+     fontSize: 14,
      fontWeight: '600',
-     textAlign: 'center',
+     color: DARK_GRAY,
+     flex: 0,
+     minWidth: 80,
+     marginRight: 12,
+   },
+   infoValue: {
+     fontSize: 14,
+     color: DARK_TEXT,
+     fontWeight: '500',
+     flex: 1,
+     textAlign: 'right',
+   },
+   packageSectionText: {
+     fontSize: 14,
+     color: DARK_TEXT,
+     marginBottom: 4,
+     lineHeight: 20,
+   },
+   packageSectionLabel: {
+     fontWeight: '600',
+     color: DARK_GRAY,
+   },
+  instructionItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  instructionText: {
+    fontSize: 14,
+    color: DARK_TEXT,
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 20,
+  },
+  instructionLabel: {
+    fontWeight: '600',
+    color: DARK_GRAY,
+  },
+  packageCharacteristics: {
+    paddingLeft: 26,
+  },
+  characteristicItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  characteristicText: {
+    fontSize: 14,
+    color: DARK_TEXT,
+    marginLeft: 8,
+  },
+  characteristicLabel: {
+    fontWeight: '600',
+    color: DARK_GRAY,
+  },
+  packageBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  specialBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  specialBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  modalText: {
+    fontSize: 15,
+    color: DARK_TEXT,
+    marginBottom: 4,
+  },
+  modalSubtext: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  fragileText: {
+    color: '#FF6B6B',
+  },
+  urgentText: {
+    color: '#FF9800',
    },
        // Styles pour le modal de vérification
     modalOverlay: {

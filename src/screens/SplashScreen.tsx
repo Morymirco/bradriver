@@ -1,6 +1,6 @@
+import { StackActions, useNavigation } from '@react-navigation/native';
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, StatusBar } from 'react-native';
-import { useNavigation, StackActions } from '@react-navigation/native';
+import { StatusBar, StyleSheet, Text, View } from 'react-native';
 
 const DARK_BG = '#181A20';
 const DARK_CARD = '#23262F';

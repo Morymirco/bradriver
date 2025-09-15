@@ -4,6 +4,7 @@ import { Alert, Image, Modal, RefreshControl, SafeAreaView, ScrollView, StyleShe
 import { useOffers } from '../components/OffersContext';
 import { useDriver } from '../hooks';
 import { supabase } from '../lib/supabase';
+import { DriverEarningsService } from '../services/driverEarningsService';
 
 const PRIMARY = '#E31837';
 const DARK_BG = '#181A20';
@@ -38,11 +39,66 @@ interface ProgrammedOrder {
   order_items: OrderItem[];
   estimated_distance: number;
   estimated_duration: number;
-  driver_earnings: number;
+  delivery_fee: number; // Pour calculer les gains dynamiquement
+  scheduled_delivery_window_start: string;
+  scheduled_delivery_window_end: string;
+  created_at: string;
+  is_package_order?: boolean; // Nouveau champ pour identifier les commandes de colis
+  is_grouped_delivery?: boolean; // Nouveau champ pour identifier les livraisons groupées
+  // Détails spécifiques aux colis
+  packageDetails?: {
+    weight: string;
+    dimensions?: string;
+    description?: string;
+    is_fragile: boolean;
+    is_urgent: boolean;
+  };
+  pickupInstructions?: string;
+  deliveryInstructions?: string;
+  preferredTime?: string;
+  contactMethod?: string;
+}
+
+// Interface pour les commandes de colis
+interface PackageOrder {
+  id: string;
+  order_id: string;
+  business_name: string;
+  customer_name: string;
+  service_name: string;
+  pickup_address: string;
+  delivery_address: string;
+  business_phone?: string;
+  business_email?: string;
+  customer_phone?: string;
+  status: string;
+  package_details: {
+    weight: string;
+    dimensions: string;
+    is_fragile: boolean;
+    is_urgent: boolean;
+    description?: string;
+  };
+  customer_info: {
+    name: string;
+    phone: string;
+    email: string;
+  };
+  delivery_preferences: {
+    preferred_time?: string;
+    contact_method: string;
+  };
+  estimated_distance: number;
+  estimated_duration: number;
+  delivery_fee: number;
+  service_price: number;
+  grand_total: number;
   scheduled_delivery_window_start: string;
   scheduled_delivery_window_end: string;
   created_at: string;
 }
+
+type TabType = 'orders' | 'packages';
 
 export const AvailableOffersScreen: React.FC = () => {
   const { acceptedOffers, acceptOffer } = useOffers();
@@ -51,6 +107,7 @@ export const AvailableOffersScreen: React.FC = () => {
   const [availableOffers, setAvailableOffers] = useState<ProgrammedOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('orders');
 
   // Modal state
   const [selectedOffer, setSelectedOffer] = useState<ProgrammedOrder | null>(null);
@@ -60,160 +117,177 @@ export const AvailableOffersScreen: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 
-  // Charger les offres disponibles (commandes programmées à l'état "prêt")
+  // Filtrer les offres selon l'onglet actif
+  const filteredOffers = availableOffers.filter(offer => {
+    if (activeTab === 'orders') {
+      return !offer.is_package_order; // Commandes normales + groupes
+    } else if (activeTab === 'packages') {
+      return offer.is_package_order; // Seulement les colis
+    }
+    return false;
+  });
+
+  // Charger les offres disponibles (commandes programmées et commandes de colis à l'état "prêt")
   const loadAvailableOffers = async () => {
     try {
       setLoading(true);
       
-
-      
-             // Requête avec jointures pour récupérer les informations complètes
-       let query = supabase
-         .from('orders')
-         .select(`
-           id,
-           business_id,
-           user_id,
-           status,
-           grand_total,
-           delivery_fee,
-           delivery_address,
-           pickup_coordinates,
-           delivery_coordinates,
-           delivery_type,
-           scheduled_delivery_window_start,
-           scheduled_delivery_window_end,
-           available_for_drivers,
-           created_at,
-           businesses!inner(name, address, phone, email),
-           user_profiles!inner(name, phone_number, address),
-           order_items(id, name, price, quantity, image, special_instructions)
-         `)
-        .eq('available_for_drivers', true)  // Disponibles pour les chauffeurs
-        .is('driver_id', null)              // Non assignées à un chauffeur
+      // Charger toutes les commandes disponibles (normales ET colis) depuis la table orders
+      let query = supabase
+        .from('orders')
+        .select(`
+          id,
+          business_id,
+          user_id,
+          status,
+          grand_total,
+          delivery_fee,
+          delivery_address,
+          pickup_coordinates,
+          delivery_coordinates,
+          delivery_type,
+          scheduled_delivery_window_start,
+          scheduled_delivery_window_end,
+          available_for_drivers,
+          created_at,
+          businesses!inner(name, address, phone, email),
+          user_profiles!inner(name, phone_number, address),
+          order_items(id, name, price, quantity, image, special_instructions)
+        `)
+        .is('driver_id', null)              // Non assignées à un livreur
+        .in('status', ['pending', 'confirmed', 'preparing', 'ready'])  // Statuts appropriés
         .order('scheduled_delivery_window_start', { ascending: true });
 
-      // Si le chauffeur appartient à un business, filtrer par ce business
+      // Si le livreur appartient à un business, filtrer par ce business
       if (profile?.business_id && !isIndependent) {
         query = query.eq('business_id', profile.business_id);
       }
 
-      const { data, error } = await query;
-
-      // Si aucune donnée trouvée, essayer une requête alternative
-      if (!data || data.length === 0) {
-        
-                 let alternativeQuery = supabase
-           .from('orders')
-           .select(`
-             id,
-             business_id,
-             user_id,
-             status,
-             grand_total,
-             delivery_fee,
-             delivery_address,
-             pickup_coordinates,
-             delivery_coordinates,
-             delivery_type,
-             scheduled_delivery_window_start,
-             scheduled_delivery_window_end,
-             available_for_drivers,
-             created_at,
-             businesses!inner(name, address, phone, email),
-             user_profiles!inner(name, phone_number, address),
-             order_items(id, name, price, quantity, image, special_instructions)
-           `)
-          .eq('available_for_drivers', true)
-          .is('driver_id', null)
-          .order('created_at', { ascending: false })
-          .limit(10);
-
-        if (profile?.business_id && !isIndependent) {
-          alternativeQuery = alternativeQuery.eq('business_id', profile.business_id);
-        }
-
-        const { data: altData, error: altError } = await alternativeQuery;
-
-                 if (altData && altData.length > 0) {
-           // Utiliser les données de la requête alternative
-           const transformedOffers: ProgrammedOrder[] = altData.map(order => {
-             // Calculer les gains du chauffeur (15% par défaut)
-             const driverEarnings = Math.round((order.grand_total * 0.15) / 100);
-             
-             // Calculer la distance estimée (simulation)
-             const estimatedDistance = Math.round(Math.random() * 8 + 2);
-             
-             // Calculer la durée estimée (simulation)
-             const estimatedDuration = Math.round(estimatedDistance * 3 + Math.random() * 10);
-
-             return {
-               id: order.order_number || order.id,
-               order_id: order.id,
-               business_name: order.businesses?.name || 'Restaurant',
-               customer_name: order.user_profiles?.name || 'Client',
-               order_details: 'Commande standard',
-               pickup_address: order.businesses?.address || 'Adresse de récupération',
-               delivery_address: order.delivery_address || order.user_profiles?.address || 'Adresse de livraison',
-               business_phone: order.businesses?.phone,
-               business_email: order.businesses?.email,
-               customer_phone: order.user_profiles?.phone_number,
-               status: order.status,
-               order_items: order.order_items || [],
-               estimated_distance: estimatedDistance,
-               estimated_duration: estimatedDuration,
-               driver_earnings: driverEarnings,
-               scheduled_delivery_window_start: order.scheduled_delivery_window_start || order.created_at,
-               scheduled_delivery_window_end: order.scheduled_delivery_window_end || order.created_at,
-               created_at: order.created_at,
-             };
-           });
-
-          setAvailableOffers(transformedOffers);
-          return;
-        }
-      }
-
-
+      const { data: orders, error } = await query;
 
       if (error) {
-        console.error('Erreur lors du chargement des offres:', error);
+        console.error('Erreur lors du chargement des commandes:', error);
         Alert.alert('Erreur', 'Impossible de charger les offres disponibles');
         return;
       }
 
-             // Transformer les données pour correspondre à notre interface
-       const transformedOffers: ProgrammedOrder[] = (data || []).map((order) => {
-         // Calculer les gains du chauffeur (15% par défaut)
-         const driverEarnings = Math.round((order.grand_total * 0.15) / 100);
-         
-         // Calculer la distance estimée (simulation)
-         const estimatedDistance = Math.round(Math.random() * 8 + 2);
-         
-         // Calculer la durée estimée (simulation)
-         const estimatedDuration = Math.round(estimatedDistance * 3 + Math.random() * 10);
+      // Identifier les commandes de colis en vérifiant directement dans package_orders
+      let packageOrderIds = new Set<string>();
+      
+      // Récupérer les détails des commandes de colis
+      let packageOrdersDetails: any[] = [];
+      try {
+        const { data: packageDetails } = await supabase
+          .from('package_orders')
+          .select('*')
+          .in('order_id', orders?.map(o => o.id) || []);
+        
+        packageOrdersDetails = packageDetails || [];
+        packageOrderIds = new Set(packageDetails?.map(pkg => pkg.order_id) || []);
+      } catch (packageError) {
+        console.error('Erreur lors du chargement des détails des colis:', packageError);
+      }
 
-         return {
-           id: order.order_number || order.id,
-           order_id: order.id,
-           business_name: order.businesses?.name || 'Restaurant',
-           customer_name: order.user_profiles?.name || 'Client',
-           order_details: 'Commande standard',
-           pickup_address: order.businesses?.address || 'Adresse de récupération',
-           delivery_address: order.delivery_address || order.user_profiles?.address || 'Adresse de livraison',
-           business_phone: order.businesses?.phone,
-           business_email: order.businesses?.email,
-           customer_phone: order.user_profiles?.phone_number,
-           status: order.status,
-           order_items: order.order_items || [],
-           estimated_distance: estimatedDistance,
-           estimated_duration: estimatedDuration,
-           driver_earnings: driverEarnings,
-           scheduled_delivery_window_start: order.scheduled_delivery_window_start || order.created_at,
-           scheduled_delivery_window_end: order.scheduled_delivery_window_end || order.created_at,
-           created_at: order.created_at,
-         };
-       });
+      // Transformer toutes les commandes
+      const transformedOffers: ProgrammedOrder[] = orders?.map((order) => {
+        const isPackageOrder = packageOrderIds.has(order.id);
+        const packageDetails = packageOrdersDetails.find(pkg => pkg.order_id === order.id);
+        const isGroupedDelivery = order.is_grouped_delivery || false;
+        
+        // Calculer les gains du livreur (40% des frais de livraison)
+        const driverEarnings = DriverEarningsService.calculateEarnings(order.delivery_fee);
+       
+        // Calculer la distance estimée (simulation)
+        const estimatedDistance = Math.round(Math.random() * 8 + 2);
+        
+        // Calculer la durée estimée (simulation)
+        const estimatedDuration = Math.round(estimatedDistance * 3 + Math.random() * 10);
+
+        if (isPackageOrder && packageDetails) {
+          // Commande de colis
+          return {
+            id: order.order_number || order.id,
+            order_id: order.id,
+            business_name: order.businesses?.name || 'Service de Colis',
+            customer_name: packageDetails.customer_name || 'Client',
+            order_details: `Colis - ${packageDetails.service_name}`,
+            pickup_address: packageDetails.pickup_address || 'Point de collecte',
+            delivery_address: packageDetails.delivery_address || 'Adresse de livraison',
+            business_phone: order.businesses?.phone,
+            business_email: order.businesses?.email,
+            customer_phone: packageDetails.customer_phone,
+            status: order.status,
+            order_items: [], // Pas d'items pour les colis
+            estimated_distance: estimatedDistance,
+            estimated_duration: estimatedDuration,
+            delivery_fee: order.delivery_fee,
+            scheduled_delivery_window_start: packageDetails.estimated_delivery_time || order.created_at,
+            scheduled_delivery_window_end: packageDetails.estimated_delivery_time || order.created_at,
+            created_at: order.created_at,
+            is_package_order: true,
+            is_grouped_delivery: isGroupedDelivery,
+            packageDetails: {
+              weight: packageDetails.package_weight,
+              dimensions: packageDetails.package_dimensions,
+              description: packageDetails.package_description,
+              is_fragile: packageDetails.is_fragile,
+              is_urgent: packageDetails.is_urgent,
+            },
+            pickupInstructions: packageDetails.pickup_instructions,
+            deliveryInstructions: packageDetails.delivery_instructions,
+            preferredTime: packageDetails.preferred_time,
+            contactMethod: packageDetails.contact_method,
+          };
+        } else if (isGroupedDelivery) {
+          // Commande groupée
+          return {
+            id: order.order_number || order.id,
+            order_id: order.id,
+            business_name: order.businesses?.name || 'Livraison Groupée',
+            customer_name: order.user_profiles?.name || 'Client',
+            order_details: `Livraison groupée - ${order.group_sequence || 1} commande(s)`,
+            pickup_address: order.businesses?.address || 'Adresse de récupération',
+            delivery_address: order.delivery_address || order.user_profiles?.address || 'Adresse de livraison',
+            business_phone: order.businesses?.phone,
+            business_email: order.businesses?.email,
+            customer_phone: order.user_profiles?.phone_number,
+            status: order.status,
+            order_items: order.order_items || [],
+            estimated_distance: estimatedDistance,
+            estimated_duration: estimatedDuration,
+            delivery_fee: order.delivery_fee,
+            scheduled_delivery_window_start: order.scheduled_delivery_window_start || order.created_at,
+            scheduled_delivery_window_end: order.scheduled_delivery_window_end || order.created_at,
+            created_at: order.created_at,
+            is_package_order: false,
+            is_grouped_delivery: true,
+          };
+        } else {
+          // Commande normale
+          return {
+            id: order.order_number || order.id,
+            order_id: order.id,
+            business_name: order.businesses?.name || 'Restaurant',
+            customer_name: order.user_profiles?.name || 'Client',
+            order_details: 'Commande standard',
+            pickup_address: order.businesses?.address || 'Adresse de récupération',
+            delivery_address: order.delivery_address || order.user_profiles?.address || 'Adresse de livraison',
+            business_phone: order.businesses?.phone,
+            business_email: order.businesses?.email,
+            customer_phone: order.user_profiles?.phone_number,
+            status: order.status,
+            order_items: order.order_items || [],
+            estimated_distance: estimatedDistance,
+            estimated_duration: estimatedDuration,
+            delivery_fee: order.delivery_fee,
+            scheduled_delivery_window_start: order.scheduled_delivery_window_start || order.created_at,
+            scheduled_delivery_window_end: order.scheduled_delivery_window_end || order.created_at,
+            created_at: order.created_at,
+            is_package_order: false,
+            is_grouped_delivery: false,
+          };
+        }
+      }) || [];
 
       setAvailableOffers(transformedOffers);
     } catch (error) {
@@ -227,7 +301,7 @@ export const AvailableOffersScreen: React.FC = () => {
   // Accepter une offre
   const handleAcceptOffer = async (offer: ProgrammedOrder) => {
     try {
-      // Mettre à jour la commande avec l'ID du chauffeur et la marquer comme non disponible
+      // Toutes les commandes (normales ET colis) sont dans la table orders
       const { error } = await supabase
         .from('orders')
         .update({ 
@@ -243,33 +317,52 @@ export const AvailableOffersScreen: React.FC = () => {
         return;
       }
 
-             // Ajouter l'offre au contexte local
-       const offerToAccept = {
-         id: offer.id,
-         restaurant: offer.business_name,
-         status: 'accepted',
-         assignedBy: 'Système',
-         time: new Date(offer.scheduled_delivery_window_start).toLocaleTimeString('fr-FR', { 
-           hour: '2-digit', 
-           minute: '2-digit' 
-         }),
-         details: offer.order_details,
-         client: offer.customer_name,
-         duration: `${offer.estimated_duration} min`,
-         gain: formatPrice(offer.driver_earnings),
-         distance: `${offer.estimated_distance} km`,
-         date: new Date(offer.scheduled_delivery_window_start).toISOString().split('T')[0],
-       };
+      // Enregistrer les gains du driver (sera confirmé quand la commande sera livrée)
+      const earningsResult = await DriverEarningsService.recordDriverEarnings(
+        profile?.id!,
+        offer.order_id,
+        offer.delivery_fee
+      );
+
+      if (!earningsResult.success) {
+        console.warn('Erreur lors de l\'enregistrement des gains:', earningsResult.error);
+        // Ne pas faire échouer l'acceptation pour une erreur de gains
+      }
+
+      // Ajouter l'offre au contexte local
+      const offerToAccept = {
+        id: offer.id,
+        restaurant: offer.business_name,
+        status: 'accepted',
+        assignedBy: 'Système',
+        time: new Date(offer.scheduled_delivery_window_start).toLocaleTimeString('fr-FR', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        }),
+        details: offer.is_package_order ? `📦 ${offer.order_details}` : offer.order_details,
+        client: offer.customer_name,
+        duration: `${offer.estimated_duration} min`,
+        gain: DriverEarningsService.formatEarnings(DriverEarningsService.calculateEarnings(offer.delivery_fee)),
+        distance: `${offer.estimated_distance} km`,
+        date: new Date(offer.scheduled_delivery_window_start).toISOString().split('T')[0],
+        isPackageOrder: offer.is_package_order || false,
+      };
 
       acceptOffer(offerToAccept);
       
       // Recharger les offres disponibles
       await loadAvailableOffers();
       
-      Alert.alert('Succès', 'Offre acceptée avec succès !');
+      const message = offer.is_package_order 
+        ? 'Offre de livraison de colis acceptée avec succès !' 
+        : 'Offre acceptée avec succès !';
+      Alert.alert('Succès', message);
     } catch (error) {
       console.error('Erreur lors de l\'acceptation:', error);
-      Alert.alert('Erreur', 'Impossible d\'accepter cette offre');
+      const errorMessage = offer.is_package_order 
+        ? 'Impossible d\'accepter cette offre de colis' 
+        : 'Impossible d\'accepter cette offre';
+      Alert.alert('Erreur', errorMessage);
     }
   };
 
@@ -348,17 +441,18 @@ export const AvailableOffersScreen: React.FC = () => {
     return statusMap[status] || status;
   };
 
-  // Obtenir la couleur du statut
+  // Obtenir la couleur du statut (configuration uniformisée)
   const getStatusColor = (status: string) => {
     const colorMap: { [key: string]: string } = {
-      'pending': '#FFA500', // Orange
-      'confirmed': '#4CAF50', // Vert
-      'preparing': '#2196F3', // Bleu
-      'ready': '#4CAF50', // Vert
-      'picked_up': '#9C27B0', // Violet
-      'delivered': '#4CAF50', // Vert
-      'cancelled': '#F44336', // Rouge
-      'scheduled': '#FF9800' // Orange foncé
+      'pending': '#F59E0B',      // Orange/Ambre
+      'confirmed': '#3B82F6',    // Bleu
+      'preparing': '#F59E0B',    // Orange/Ambre
+      'ready': '#10B981',        // Vert
+      'picked_up': '#8B5CF6',    // Violet
+      'out_for_delivery': '#FF9800', // Orange vif
+      'delivered': '#10B981',    // Vert
+      'cancelled': '#EF4444',    // Rouge
+      'scheduled': '#FF9800'     // Orange foncé
     };
     return colorMap[status] || DARK_GRAY;
   };
@@ -368,14 +462,64 @@ export const AvailableOffersScreen: React.FC = () => {
     return price.toLocaleString('fr-FR') + ' GNF';
   };
 
+  // Obtenir le nombre d'offres par type
+  const ordersCount = availableOffers.filter(offer => !offer.is_package_order).length; // Commandes + groupes
+  const packagesCount = availableOffers.filter(offer => offer.is_package_order).length; // Seulement colis
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerSimple}>
-        <Text style={styles.headerTitle}>Offres Disponibles</Text>
-        <Text style={styles.headerSubtitle}>
-          Commandes programmées prêtes à être livrées
-        </Text>
+      <ScrollView
+        style={styles.mainScrollView}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[PRIMARY]}
+            tintColor={PRIMARY}
+            title="Actualisation..."
+            titleColor={PRIMARY}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.headerSimple}>
+          <Text style={styles.headerTitle}>Offres Disponibles</Text>
+          <Text style={styles.headerSubtitle}>
+            Commandes programmées prêtes à être livrées
+          </Text>
+        </View>
 
+      {/* Onglets */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'orders' && styles.activeTab]}
+          onPress={() => setActiveTab('orders')}
+        >
+                     <MaterialIcons 
+             name="restaurant" 
+             size={20} 
+             color={activeTab === 'orders' ? PRIMARY : DARK_GRAY} 
+           />
+          <Text style={[styles.tabText, activeTab === 'orders' && styles.activeTabText]}>
+            Commandes ({ordersCount})
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'packages' && styles.activeTab]}
+          onPress={() => setActiveTab('packages')}
+        >
+                     <MaterialIcons 
+             name="local-shipping" 
+             size={20} 
+             color={activeTab === 'packages' ? PRIMARY : DARK_GRAY} 
+           />
+          <Text style={[styles.tabText, activeTab === 'packages' && styles.activeTabText]}>
+            Colis ({packagesCount})
+          </Text>
+        </TouchableOpacity>
+
+        
       </View>
       
       {loading ? (
@@ -383,180 +527,293 @@ export const AvailableOffersScreen: React.FC = () => {
           <MaterialIcons name="hourglass-empty" size={64} color={PRIMARY} />
           <Text style={styles.emptyText}>Chargement des offres...</Text>
         </View>
-      ) : availableOffers.length === 0 ? (
+      ) : filteredOffers.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <MaterialIcons name="local-offer" size={64} color={DARK_GRAY} />
-          <Text style={styles.emptyText}>Aucune offre disponible</Text>
-          <Text style={styles.emptySubtext}>
-            {isIndependent 
-              ? 'Aucune commande programmée disponible pour le moment'
-              : 'Aucune commande de votre service disponible pour le moment'
-            }
-          </Text>
+                     <MaterialIcons 
+             name={
+               activeTab === 'orders' ? 'restaurant' : 
+               'local-shipping'
+             } 
+             size={64} 
+             color={DARK_GRAY} 
+           />
+                     <Text style={styles.emptyText}>
+             {activeTab === 'orders' ? 'Aucune commande disponible' : 
+              'Aucun colis disponible'}
+           </Text>
+           <Text style={styles.emptySubtext}>
+             {activeTab === 'orders' 
+               ? 'Aucune commande programmée disponible pour le moment'
+               : 'Aucune livraison de colis disponible pour le moment'
+             }
+           </Text>
         </View>
       ) : (
         <ScrollView
           style={styles.offersList}
-          horizontal
+          horizontal={filteredOffers.length > 1}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalList}
+          contentContainerStyle={[
+            styles.horizontalList,
+            filteredOffers.length === 1 && styles.singleItemContainer
+          ]}
           ref={scrollRef}
-          onScroll={handleScroll}
+          onScroll={filteredOffers.length > 1 ? handleScroll : undefined}
           scrollEventThrottle={16}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[PRIMARY]}
-              tintColor={PRIMARY}
-            />
-          }
         >
-                     {availableOffers.map((offer) => (
-             <TouchableOpacity 
-               key={offer.id} 
-               style={styles.offerCardSimpleHorizontal}
-               onPress={() => openOfferDetails(offer)}
-               activeOpacity={0.8}
-             >
-               <View style={styles.offerHeader}>
-                 <MaterialIcons name="schedule" size={16} color={PRIMARY} />
-                 <Text style={styles.deliveryTime}>
-                   {formatDeliveryTime(offer.scheduled_delivery_window_start, offer.scheduled_delivery_window_end)}
-                 </Text>
-               </View>
-               
-               <Text style={styles.restaurantName}>{offer.business_name}</Text>
-               <Text style={styles.details}>{offer.order_details}</Text>
-               
-               <View style={styles.customerInfo}>
-                 <MaterialIcons name="person" size={14} color={DARK_GRAY} />
-                 <Text style={styles.customerName}>{offer.customer_name}</Text>
-               </View>
-               
-               <View style={styles.rowInfo}>
-                                   <View style={styles.infoItem}>
-                    <MaterialIcons name="euro" size={18} color={PRIMARY} />
-                    <Text style={styles.gain}>{formatPrice(offer.driver_earnings)}</Text>
-                  </View>
-                 <View style={styles.infoItem}>
-                   <MaterialIcons name="place" size={18} color={DARK_GRAY} />
-                   <Text style={styles.distance}>{offer.estimated_distance} km</Text>
-                 </View>
-                 <View style={styles.infoItem}>
-                   <MaterialIcons name="access-time" size={18} color={DARK_GRAY} />
-                   <Text style={styles.duration}>{offer.estimated_duration} min</Text>
-                 </View>
-               </View>
-               
-               <TouchableOpacity 
-                 style={styles.acceptBtn} 
-                 onPress={(e) => {
-                   e.stopPropagation();
-                   handleAcceptOffer(offer);
-                 }}
-               >
-                 <Text style={styles.acceptBtnText}>Accepter</Text>
-               </TouchableOpacity>
-             </TouchableOpacity>
-           ))}
+          {filteredOffers.map((offer) => (
+            <TouchableOpacity 
+              key={offer.id} 
+              style={[
+                styles.offerCardSimpleHorizontal,
+                filteredOffers.length === 1 && styles.singleItemCard
+              ]}
+              onPress={() => openOfferDetails(offer)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.offerHeader}>
+                <MaterialIcons name="schedule" size={16} color={PRIMARY} />
+                <Text style={styles.deliveryTime}>
+                  {formatDeliveryTime(offer.scheduled_delivery_window_start, offer.scheduled_delivery_window_end)}
+                </Text>
+              </View>
+              
+              <Text style={styles.restaurantName}>{offer.business_name}</Text>
+              <Text style={styles.details}>
+                {offer.is_package_order ? (
+                  <Text style={styles.packageBadge}>📦 {offer.order_details}</Text>
+                ) : offer.is_grouped_delivery ? (
+                  <Text style={styles.groupBadge}>👥 {offer.order_details}</Text>
+                ) : (
+                  offer.order_details
+                )}
+              </Text>
+              
+              <View style={styles.customerInfo}>
+                <MaterialIcons name="person" size={14} color={DARK_GRAY} />
+                <Text style={styles.customerName}>{offer.customer_name}</Text>
+              </View>
+              
+              <View style={styles.rowInfo}>
+                <View style={styles.infoItem}>
+                  <MaterialIcons name="euro" size={18} color={PRIMARY} />
+                  <Text style={styles.gain}>{DriverEarningsService.formatEarnings(DriverEarningsService.calculateEarnings(offer.delivery_fee))}</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialIcons name="place" size={18} color={DARK_GRAY} />
+                  <Text style={styles.distance}>{offer.estimated_distance} km</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialIcons name="access-time" size={18} color={DARK_GRAY} />
+                  <Text style={styles.duration}>{offer.estimated_duration} min</Text>
+                </View>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.acceptBtn} 
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleAcceptOffer(offer);
+                }}
+              >
+                <Text style={styles.acceptBtnText}>Accepter</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       )}
       
       {/* Pagination Dots */}
-      {!loading && availableOffers.length > 1 && (
+      {!loading && filteredOffers.length > 1 && (
         <View style={styles.paginationContainer}>
-          {availableOffers.map((_, idx) => (
+          {filteredOffers.map((_, idx) => (
             <View
               key={idx}
               style={[styles.paginationDot, currentIndex === idx && styles.paginationDotActive]}
             />
           ))}
-                 </View>
-       )}
+        </View>
+      )}
 
-       {/* Modal de détails */}
-       <Modal
-         animationType="slide"
-         transparent={true}
-         visible={modalVisible}
-         onRequestClose={closeModal}
-       >
-         <View style={styles.modalOverlay}>
-           <View style={styles.modalContent}>
-             {selectedOffer && (
-               <>
-                 <View style={styles.modalHeader}>
-                   <Text style={styles.modalTitle}>Détails de la commande</Text>
-                   <TouchableOpacity onPress={closeModal} style={styles.closeButton}>
-                     <MaterialIcons name="close" size={24} color={DARK_GRAY} />
-                   </TouchableOpacity>
-                 </View>
+      {/* Modal de détails */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {selectedOffer && (
+              <>
+                <View style={styles.modalHeader}>
+                                     <Text style={styles.modalTitle}>
+                     {selectedOffer.is_package_order ? 'Détails de la livraison de colis' : 
+                      'Détails de la commande'}
+                   </Text>
+                  <TouchableOpacity onPress={closeModal} style={styles.closeButton}>
+                    <MaterialIcons name="close" size={24} color={DARK_GRAY} />
+                  </TouchableOpacity>
+                </View>
 
-                                   <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-                    {/* Statut de la commande */}
-                    <View style={styles.modalSection}>
-                      <View style={styles.sectionHeader}>
-                        <MaterialIcons name="info" size={20} color={PRIMARY} />
-                        <Text style={styles.sectionTitle}>Statut de la commande</Text>
-                      </View>
-                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedOffer.status) }]}>
-                        <Text style={styles.statusText}>{formatStatus(selectedOffer.status)}</Text>
-                      </View>
+                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                  {/* Statut de la commande */}
+                  <View style={styles.modalSection}>
+                    <View style={styles.sectionHeader}>
+                      <MaterialIcons name="info" size={20} color={PRIMARY} />
+                      <Text style={styles.sectionTitle}>Statut de la commande</Text>
                     </View>
-
-                    {/* Informations du restaurant */}
-                    <View style={styles.modalSection}>
-                      <View style={styles.sectionHeader}>
-                        <MaterialIcons name="restaurant" size={20} color={PRIMARY} />
-                        <Text style={styles.sectionTitle}>Restaurant</Text>
-                      </View>
-                      <Text style={styles.modalText}>{selectedOffer.business_name}</Text>
-                      <Text style={styles.modalSubtext}>{selectedOffer.pickup_address}</Text>
-                      <View style={styles.modalRow}>
-                        <MaterialIcons name="phone" size={16} color={DARK_GRAY} />
-                        <Text style={styles.modalText}>Téléphone: {selectedOffer.business_phone || 'Non disponible'}</Text>
-                      </View>
-                      <View style={styles.modalRow}>
-                        <MaterialIcons name="email" size={16} color={DARK_GRAY} />
-                        <Text style={styles.modalText}>Email: {selectedOffer.business_email || 'Non disponible'}</Text>
-                      </View>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedOffer.status) }]}>
+                      <Text style={styles.statusText}>{formatStatus(selectedOffer.status)}</Text>
                     </View>
+                  </View>
 
-                   {/* Informations du client */}
-                   <View style={styles.modalSection}>
-                     <View style={styles.sectionHeader}>
-                       <MaterialIcons name="person" size={20} color={PRIMARY} />
-                       <Text style={styles.sectionTitle}>Client</Text>
-                     </View>
-                     <Text style={styles.modalText}>{selectedOffer.customer_name}</Text>
-                     <Text style={styles.modalSubtext}>{selectedOffer.delivery_address}</Text>
-                     <View style={styles.modalRow}>
-                       <MaterialIcons name="phone" size={16} color={DARK_GRAY} />
-                       <Text style={styles.modalText}>Téléphone: {selectedOffer.customer_phone || 'Non disponible'}</Text>
-                     </View>
-                   </View>
+                  {/* Informations du restaurant/service */}
+                  <View style={styles.modalSection}>
+                    <View style={styles.sectionHeader}>
+                      <MaterialIcons 
+                        name={
+                          selectedOffer.is_package_order ? "local-shipping" : 
+                          selectedOffer.is_grouped_delivery ? "group-work" :
+                          "restaurant"
+                        } 
+                        size={20} 
+                        color={PRIMARY} 
+                      />
+                                             <Text style={styles.sectionTitle}>
+                         {selectedOffer.is_package_order ? 'Service de Colis' : 
+                          'Restaurant'}
+                       </Text>
+                    </View>
+                    <Text style={styles.modalText}>{selectedOffer.business_name}</Text>
+                    <Text style={styles.modalSubtext}>{selectedOffer.pickup_address}</Text>
+                    <View style={styles.modalRow}>
+                      <MaterialIcons name="phone" size={16} color={DARK_GRAY} />
+                      <Text style={styles.modalText}>Téléphone: {selectedOffer.business_phone || 'Non disponible'}</Text>
+                    </View>
+                    <View style={styles.modalRow}>
+                      <MaterialIcons name="email" size={16} color={DARK_GRAY} />
+                      <Text style={styles.modalText}>Email: {selectedOffer.business_email || 'Non disponible'}</Text>
+                    </View>
+                  </View>
 
-                                       {/* Détails de la commande */}
-                    <View style={styles.modalSection}>
-                      <View style={styles.sectionHeader}>
-                        <MaterialIcons name="receipt" size={20} color={PRIMARY} />
-                        <Text style={styles.sectionTitle}>Items de la commande</Text>
+                  {/* Informations du client */}
+                  <View style={styles.modalSection}>
+                    <View style={styles.sectionHeader}>
+                      <MaterialIcons name="person" size={20} color={PRIMARY} />
+                      <Text style={styles.sectionTitle}>Client</Text>
+                    </View>
+                    <Text style={styles.modalText}>{selectedOffer.customer_name}</Text>
+                    <Text style={styles.modalSubtext}>{selectedOffer.delivery_address}</Text>
+                    <View style={styles.modalRow}>
+                      <MaterialIcons name="phone" size={16} color={DARK_GRAY} />
+                      <Text style={styles.modalText}>Téléphone: {selectedOffer.customer_phone || 'Non disponible'}</Text>
+                    </View>
+                  </View>
+
+                  {/* Détails de la commande */}
+                  <View style={styles.modalSection}>
+                    <View style={styles.sectionHeader}>
+                      <MaterialIcons 
+                        name={
+                          selectedOffer.is_package_order ? "inventory" : 
+                          selectedOffer.is_grouped_delivery ? "group-work" :
+                          "receipt"
+                        } 
+                        size={20} 
+                        color={PRIMARY} 
+                      />
+                                             <Text style={styles.sectionTitle}>
+                         {selectedOffer.is_package_order ? 'Détails du Colis' : 
+                          'Items de la commande'}
+                       </Text>
+                    </View>
+                    {selectedOffer.is_package_order ? (
+                      // Affichage pour les commandes de colis
+                      <View style={styles.packageDetails}>
+                        <Text style={styles.modalText}>
+                          <Text style={styles.packageBadge}>📦 {selectedOffer.order_details}</Text>
+                        </Text>
+                        <Text style={styles.modalSubtext}>
+                          Service de livraison de colis spécialisé
+                        </Text>
+                        
+                        {/* Détails spécifiques du colis */}
+                        {selectedOffer.packageDetails && (
+                          <View style={styles.packageSpecificDetails}>
+                            <View style={styles.modalRow}>
+                              <MaterialIcons name="scale" size={16} color={DARK_GRAY} />
+                              <Text style={styles.modalText}>Poids: {selectedOffer.packageDetails.weight}</Text>
+                            </View>
+                            {selectedOffer.packageDetails.dimensions && (
+                              <View style={styles.modalRow}>
+                                <MaterialIcons name="straighten" size={16} color={DARK_GRAY} />
+                                <Text style={styles.modalText}>Dimensions: {selectedOffer.packageDetails.dimensions}</Text>
+                              </View>
+                            )}
+                            {selectedOffer.packageDetails.description && (
+                              <View style={styles.modalRow}>
+                                <MaterialIcons name="description" size={16} color={DARK_GRAY} />
+                                <Text style={styles.modalText}>Description: {selectedOffer.packageDetails.description}</Text>
+                              </View>
+                            )}
+                            <View style={styles.modalRow}>
+                              <MaterialIcons name="warning" size={16} color={selectedOffer.packageDetails.is_fragile ? "#FF6B6B" : DARK_GRAY} />
+                              <Text style={[styles.modalText, selectedOffer.packageDetails.is_fragile && styles.fragileText]}>
+                                Fragile: {selectedOffer.packageDetails.is_fragile ? 'Oui' : 'Non'}
+                              </Text>
+                            </View>
+                            <View style={styles.modalRow}>
+                              <MaterialIcons name="priority-high" size={16} color={selectedOffer.packageDetails.is_urgent ? "#FF9800" : DARK_GRAY} />
+                              <Text style={[styles.modalText, selectedOffer.packageDetails.is_urgent && styles.urgentText]}>
+                                Urgent: {selectedOffer.packageDetails.is_urgent ? 'Oui' : 'Non'}
+                              </Text>
+                            </View>
+                          </View>
+                        )}
                       </View>
-                      {selectedOffer.order_items && selectedOffer.order_items.length > 0 ? (
+                    ) : selectedOffer.is_grouped_delivery ? (
+                      // Affichage pour les livraisons groupées
+                      <View style={styles.groupDetails}>
+                        <Text style={styles.modalText}>
+                          <Text style={styles.groupBadge}>👥 {selectedOffer.order_details}</Text>
+                        </Text>
+                        <Text style={styles.modalSubtext}>
+                          Livraison groupée - Plusieurs commandes en une seule livraison
+                        </Text>
+                        
+                        {/* Informations sur le groupe */}
+                        <View style={styles.groupSpecificDetails}>
+                          <View style={styles.modalRow}>
+                            <MaterialIcons name="group-work" size={16} color={DARK_GRAY} />
+                            <Text style={styles.modalText}>Type: Livraison groupée</Text>
+                          </View>
+                          <View style={styles.modalRow}>
+                            <MaterialIcons name="local-shipping" size={16} color={DARK_GRAY} />
+                            <Text style={styles.modalText}>Service: Livraison optimisée</Text>
+                          </View>
+                          <View style={styles.modalRow}>
+                            <MaterialIcons name="euro" size={16} color={DARK_GRAY} />
+                            <Text style={styles.modalText}>Gains optimisés: {formatPrice(Math.round(selectedOffer.delivery_fee * 0.40))}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    ) : (
+                      // Affichage pour les commandes normales
+                      selectedOffer.order_items && selectedOffer.order_items.length > 0 ? (
                         selectedOffer.order_items.map((item, index) => (
-                                                     <View key={item.id || index} style={styles.orderItem}>
-                             <View style={styles.orderItemHeader}>
-                               <View style={styles.orderItemInfo}>
-                                 {item.image && (
-                                   <View style={styles.orderItemImageContainer}>
-                                     <Image source={{ uri: item.image }} style={styles.orderItemImage} />
-                                   </View>
-                                 )}
-                                 <Text style={styles.orderItemName}>{item.name}</Text>
-                               </View>
-                               <Text style={styles.orderItemPrice}>{formatPrice(item.price)}</Text>
-                             </View>
+                          <View key={item.id || index} style={styles.orderItem}>
+                            <View style={styles.orderItemHeader}>
+                              <View style={styles.orderItemInfo}>
+                                {item.image && (
+                                  <View style={styles.orderItemImageContainer}>
+                                    <Image source={{ uri: item.image }} style={styles.orderItemImage} />
+                                  </View>
+                                )}
+                                <Text style={styles.orderItemName}>{item.name}</Text>
+                              </View>
+                              <Text style={styles.orderItemPrice}>{formatPrice(item.price)}</Text>
+                            </View>
                             <View style={styles.orderItemDetails}>
                               <Text style={styles.orderItemQuantity}>Quantité: {item.quantity}</Text>
                               {item.special_instructions && (
@@ -569,73 +826,122 @@ export const AvailableOffersScreen: React.FC = () => {
                         ))
                       ) : (
                         <Text style={styles.modalText}>Aucun détail disponible</Text>
-                      )}
+                      )
+                    )}
+                  </View>
+
+                  {/* Horaires de livraison */}
+                  <View style={styles.modalSection}>
+                    <View style={styles.sectionHeader}>
+                      <MaterialIcons name="schedule" size={20} color={PRIMARY} />
+                      <Text style={styles.sectionTitle}>Horaires de livraison</Text>
                     </View>
+                    <Text style={styles.modalText}>
+                      {formatDeliveryTime(selectedOffer.scheduled_delivery_window_start, selectedOffer.scheduled_delivery_window_end)}
+                    </Text>
+                    <Text style={styles.modalSubtext}>
+                      {formatDate(selectedOffer.scheduled_delivery_window_start)}
+                    </Text>
+                  </View>
 
-                   {/* Horaires de livraison */}
-                   <View style={styles.modalSection}>
-                     <View style={styles.sectionHeader}>
-                       <MaterialIcons name="schedule" size={20} color={PRIMARY} />
-                       <Text style={styles.sectionTitle}>Horaires de livraison</Text>
-                     </View>
-                     <Text style={styles.modalText}>
-                       {formatDeliveryTime(selectedOffer.scheduled_delivery_window_start, selectedOffer.scheduled_delivery_window_end)}
+                  {/* Informations de livraison */}
+                  <View style={styles.modalSection}>
+                    <View style={styles.sectionHeader}>
+                      <MaterialIcons name="local-shipping" size={20} color={PRIMARY} />
+                                             <Text style={styles.sectionTitle}>
+                         {selectedOffer.is_package_order ? 'Informations de livraison de colis' : 
+                          'Informations de livraison'}
+                       </Text>
+                    </View>
+                    
+                    {selectedOffer.is_package_order ? (
+                      // Affichage pour les colis
+                      <>
+                        <View style={styles.modalRow}>
+                          <MaterialIcons name="location-on" size={16} color="#3B82F6" />
+                          <Text style={styles.modalText}>Point de collecte: {selectedOffer.pickup_address}</Text>
+                        </View>
+                        {selectedOffer.pickupInstructions && (
+                          <View style={styles.modalRow}>
+                            <MaterialIcons name="info" size={16} color="#3B82F6" />
+                            <Text style={styles.modalSubtext}>Instructions collecte: {selectedOffer.pickupInstructions}</Text>
+                          </View>
+                        )}
+                        <View style={styles.modalRow}>
+                          <MaterialIcons name="location-on" size={16} color="#10B981" />
+                          <Text style={styles.modalText}>Adresse de livraison: {selectedOffer.delivery_address}</Text>
+                        </View>
+                        {selectedOffer.deliveryInstructions && (
+                          <View style={styles.modalRow}>
+                            <MaterialIcons name="info" size={16} color="#10B981" />
+                            <Text style={styles.modalSubtext}>Instructions livraison: {selectedOffer.deliveryInstructions}</Text>
+                          </View>
+                        )}
+                        <View style={styles.modalRow}>
+                          <MaterialIcons name="place" size={16} color={DARK_GRAY} />
+                          <Text style={styles.modalText}>Distance: {selectedOffer.estimated_distance} km</Text>
+                        </View>
+                        <View style={styles.modalRow}>
+                          <MaterialIcons name="access-time" size={16} color={DARK_GRAY} />
+                          <Text style={styles.modalText}>Durée estimée: {selectedOffer.estimated_duration} min</Text>
+                        </View>
+                      </>
+                    ) : (
+                      // Affichage pour les commandes normales
+                      <>
+                        <View style={styles.modalRow}>
+                          <MaterialIcons name="place" size={16} color={DARK_GRAY} />
+                          <Text style={styles.modalText}>Distance: {selectedOffer.estimated_distance} km</Text>
+                        </View>
+                        <View style={styles.modalRow}>
+                          <MaterialIcons name="access-time" size={16} color={DARK_GRAY} />
+                          <Text style={styles.modalText}>Durée estimée: {selectedOffer.estimated_duration} min</Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
+
+                  {/* Gains */}
+                  <View style={styles.modalSection}>
+                    <View style={styles.sectionHeader}>
+                      <MaterialIcons name="euro" size={20} color={PRIMARY} />
+                      <Text style={styles.sectionTitle}>Gains</Text>
+                    </View>
+                    <Text style={styles.modalGain}>{DriverEarningsService.formatEarnings(DriverEarningsService.calculateEarnings(selectedOffer.delivery_fee))}</Text>
+                  </View>
+                </ScrollView>
+
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity 
+                    style={styles.modalAcceptBtn} 
+                    onPress={() => {
+                      handleAcceptOffer(selectedOffer);
+                      closeModal();
+                    }}
+                  >
+                                         <Text style={styles.modalAcceptBtnText}>
+                       {selectedOffer.is_package_order ? 'Accepter cette livraison de colis' : 
+                        'Accepter cette commande'}
                      </Text>
-                     <Text style={styles.modalSubtext}>
-                       {formatDate(selectedOffer.scheduled_delivery_window_start)}
-                     </Text>
-                   </View>
-
-                   {/* Informations de livraison */}
-                   <View style={styles.modalSection}>
-                     <View style={styles.sectionHeader}>
-                       <MaterialIcons name="local-shipping" size={20} color={PRIMARY} />
-                       <Text style={styles.sectionTitle}>Informations de livraison</Text>
-                     </View>
-                     <View style={styles.modalRow}>
-                       <MaterialIcons name="place" size={16} color={DARK_GRAY} />
-                       <Text style={styles.modalText}>Distance: {selectedOffer.estimated_distance} km</Text>
-                     </View>
-                     <View style={styles.modalRow}>
-                       <MaterialIcons name="access-time" size={16} color={DARK_GRAY} />
-                       <Text style={styles.modalText}>Durée estimée: {selectedOffer.estimated_duration} min</Text>
-                     </View>
-                   </View>
-
-                   {/* Gains */}
-                   <View style={styles.modalSection}>
-                     <View style={styles.sectionHeader}>
-                       <MaterialIcons name="euro" size={20} color={PRIMARY} />
-                       <Text style={styles.sectionTitle}>Gains</Text>
-                     </View>
-                                           <Text style={styles.modalGain}>{formatPrice(selectedOffer.driver_earnings)}</Text>
-                   </View>
-                 </ScrollView>
-
-                 <View style={styles.modalFooter}>
-                   <TouchableOpacity 
-                     style={styles.modalAcceptBtn} 
-                     onPress={() => {
-                       handleAcceptOffer(selectedOffer);
-                       closeModal();
-                     }}
-                   >
-                     <Text style={styles.modalAcceptBtnText}>Accepter cette commande</Text>
-                   </TouchableOpacity>
-                 </View>
-               </>
-             )}
-           </View>
-         </View>
-       </Modal>
-     </SafeAreaView>
-   );
- };
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: DARK_BG,
+  },
+  mainScrollView: {
+    flex: 1,
   },
   headerSimple: {
     padding: 20,
@@ -738,6 +1044,11 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     alignItems: 'flex-start',
   },
+  singleItemContainer: {
+    paddingLeft: 16,
+    paddingRight: 16,
+    alignItems: 'stretch',
+  },
   offerCardSimpleHorizontal: {
     backgroundColor: DARK_CARD,
     borderRadius: 14,
@@ -749,6 +1060,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+  },
+  singleItemCard: {
+    width: '100%',
+    marginRight: 0,
   },
   offerHeader: {
     flexDirection: 'row',
@@ -938,6 +1253,32 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: PRIMARY,
   },
+  packageBadge: {
+    backgroundColor: '#3B82F6',
+    color: WHITE,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  groupBadge: {
+    backgroundColor: '#8B5CF6',
+    color: WHITE,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  packageDetails: {
+    backgroundColor: DARK_BG,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3B82F6',
+  },
   orderItemDetails: {
     marginTop: 4,
   },
@@ -950,5 +1291,68 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6B7280',
     fontStyle: 'italic',
+  },
+  packageSpecificDetails: {
+    marginTop: 12,
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: DARK_GRAY,
+  },
+  groupDetails: {
+    backgroundColor: DARK_BG,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#8B5CF6',
+  },
+  groupSpecificDetails: {
+    marginTop: 12,
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: DARK_GRAY,
+  },
+  fragileText: {
+    color: '#FF6B6B',
+  },
+  urgentText: {
+    color: '#FF9800',
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: DARK_CARD,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: DARK_GRAY,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    flex: 1,
+    justifyContent: 'center',
+    marginHorizontal: 4,
+  },
+  activeTab: {
+    backgroundColor: PRIMARY,
+    borderWidth: 1,
+    borderColor: PRIMARY,
+  },
+  tabText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    color: DARK_GRAY,
+  },
+  activeTabText: {
+    color: WHITE,
   },
 }); 

@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  TouchableOpacity,
-  ScrollView,
-} from 'react-native';
-import { Button, Input } from '../components';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../navigation';
+import React, { useState } from 'react';
+import {
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { Button, Input } from '../components';
 import { useAuth } from '../contexts/AuthContext';
+import { RootStackParamList } from '../navigation';
 import { DriverRegistrationData } from '../services/driverAuthService';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -123,9 +123,9 @@ export const RegisterScreen: React.FC = () => {
             {/* Register Form */}
             <View style={styles.formCard}>
               <Text style={styles.title}>Créer un compte</Text>
-              <Text style={styles.description}>
-                Rejoignez notre équipe de chauffeurs
-              </Text>
+                      <Text style={styles.description}>
+          Rejoignez notre équipe de livreurs
+        </Text>
 
               {/* Nom complet */}
               <Input

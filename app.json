@@ -1,29 +1,73 @@
 {
   "expo": {
-    "name": "BraPrimeDriverNew",
+    "name": "BraPrime Driver",
     "slug": "BraPrimeDriverNew",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#E31837"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bratech.BraPrimeDriverNew",
+      "icon": "./assets/icon.png",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "BraPrime Driver utilise la caméra pour prendre des photos de confirmation de livraison et scanner des codes de vérification.",
+        "NSLocationWhenInUseUsageDescription": "BraPrime Driver utilise votre localisation pour la navigation en temps réel et le suivi de vos livraisons.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "BraPrime Driver utilise votre localisation pour la navigation en temps réel et le suivi de vos livraisons.",
+        "NSPhotoLibraryUsageDescription": "BraPrime Driver accède à votre galerie photo pour sélectionner des images de profil."
+      }
     },
     "android": {
+      "package": "com.bratech.BraPrimeDriverNew",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#E31837"
       },
-      "edgeToEdgeEnabled": true
+      "icon": "./assets/icon.png",
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Permettre à BraPrime Driver d'accéder à votre localisation pour la navigation."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permettre à BraPrime Driver d'accéder à votre caméra pour prendre des photos de confirmation de livraison."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permettre à BraPrime Driver d'accéder à votre galerie photo pour sélectionner des images de profil."
+        }
+      ]
+    ],
+    "extra": {
+      "googleMapsApiKey": "AIzaSyDIp_O6TQg33J4Z2M44Uj3SEJZfTq1EqZU",
+      "eas": {
+        "projectId": "0cbd3367-bf77-491a-9204-05a9d429d256"
+      }
     }
   }
 }

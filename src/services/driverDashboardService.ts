@@ -13,7 +13,6 @@ export interface DriverOrder {
   actual_distance?: number;
   estimated_duration?: number;
   actual_duration?: number;
-  driver_earnings: number;
   driver_commission_percentage: number;
   assigned_at: string;
   picked_up_at?: string;
@@ -54,6 +53,8 @@ export interface DriverOrder {
       phone_number?: string;
       email: string;
     };
+    items?: any[];
+    package_orders?: any[];
   };
 }
 
@@ -90,31 +91,27 @@ export class DriverDashboardService {
         throw new Error(profileError.message);
       }
 
-      const { data: orders, error } = await supabase
+      // Récupérer les commandes assignées au driver depuis la table orders
+      const { data: driverOrders, error } = await supabase
         .from('orders')
         .select(`
           id,
           order_number,
           business_id,
           user_id,
-          status,
           total,
           delivery_fee,
           grand_total,
           delivery_method,
           payment_method,
           payment_status,
+          status,
           delivery_address,
           delivery_instructions,
-          pickup_coordinates,
-          delivery_coordinates,
           estimated_delivery,
           actual_delivery,
-          customer_rating,
-          customer_review,
           created_at,
           updated_at,
-          assigned_at,
           businesses!inner(
             id,
             name,
@@ -145,37 +142,27 @@ export class DriverDashboardService {
       }
 
       // Transformer les données pour correspondre à l'interface DriverOrder
-      const transformedOrders: DriverOrder[] = (orders || []).map(order => {
-        // Calculer les gains du chauffeur (15% par défaut)
-        const driverEarnings = Math.round((order.grand_total * 0.15) / 100);
-        
-        // Calculer la distance estimée (simulation)
-        const estimatedDistance = Math.round(Math.random() * 8 + 2);
-        
-        // Calculer la durée estimée (simulation)
-        const estimatedDuration = Math.round(estimatedDistance * 3 + Math.random() * 10);
-
+      const transformedOrders: DriverOrder[] = (driverOrders || []).map(order => {
         return {
           id: order.id,
           order_id: order.id,
-          pickup_address: order.businesses?.address || 'Adresse de récupération',
-          delivery_address: order.delivery_address || 'Adresse de livraison',
-          pickup_coordinates: order.pickup_coordinates,
-          delivery_coordinates: order.delivery_coordinates,
-          delivery_instructions: order.delivery_instructions,
-          customer_instructions: order.delivery_instructions,
-          estimated_distance: estimatedDistance,
-          actual_distance: estimatedDistance,
-          estimated_duration: estimatedDuration,
-          actual_duration: estimatedDuration,
-          driver_earnings: driverEarnings,
-          driver_commission_percentage: 15,
-          assigned_at: order.assigned_at || order.created_at,
-          picked_up_at: order.actual_delivery,
+          pickup_address: order.businesses?.address || '',
+          delivery_address: order.delivery_address || '',
+          pickup_coordinates: null,
+          delivery_coordinates: null,
+          delivery_instructions: order.delivery_instructions || '',
+          customer_instructions: '',
+          estimated_distance: 0,
+          actual_distance: 0,
+          estimated_duration: 0,
+          actual_duration: 0,
+          driver_commission_percentage: 40,
+          assigned_at: order.created_at,
+          picked_up_at: null,
           delivered_at: order.actual_delivery,
-          customer_rating: order.customer_rating,
-          driver_rating: order.customer_rating,
-          customer_review: order.customer_review,
+          customer_rating: 0,
+          driver_rating: 0,
+          customer_review: '',
           driver_review: '',
           status: order.status as any,
           metadata: {},
@@ -185,13 +172,13 @@ export class DriverDashboardService {
             id: order.id,
             order_number: order.order_number || order.id,
             total: order.total,
-          delivery_fee: order.delivery_fee,
+            delivery_fee: order.delivery_fee,
             grand_total: order.grand_total,
             delivery_method: order.delivery_method,
             payment_method: order.payment_method,
             payment_status: order.payment_status,
-          estimated_delivery: order.estimated_delivery,
-          actual_delivery: order.actual_delivery,
+            estimated_delivery: order.estimated_delivery,
+            actual_delivery: order.actual_delivery,
             customer_rating: order.customer_rating,
             customer_review: order.customer_review,
             created_at: order.created_at,
@@ -261,7 +248,7 @@ export class DriverDashboardService {
       // Calculer les statistiques
       const totalDeliveries = ordersList.filter(order => order.status === 'delivered').length;
       const totalEarnings = ordersList.reduce((sum, order) => {
-        const driverEarnings = Math.round((order.grand_total * 0.15) / 100);
+        const driverEarnings = Math.round((order.delivery_fee * 0.40));
         return sum + driverEarnings;
       }, 0);
       
@@ -284,7 +271,7 @@ export class DriverDashboardService {
       
       const currentMonthDeliveries = currentMonthOrders.filter(order => order.status === 'delivered').length;
       const currentMonthEarnings = currentMonthOrders.reduce((sum, order) => {
-        const driverEarnings = Math.round((order.grand_total * 0.15) / 100);
+        const driverEarnings = Math.round((order.delivery_fee * 0.40));
         return sum + driverEarnings;
       }, 0);
 
@@ -381,7 +368,7 @@ export class DriverDashboardService {
         .from('orders')
         .select('id, driver_id')
         .eq('id', orderId)
-        .single();
+          .single();
 
       if (checkError) {
         console.error('❌ Erreur lors de la vérification:', checkError);
@@ -441,6 +428,29 @@ export class DriverDashboardService {
             quantity,
             image,
             special_instructions
+          ),
+          package_orders(
+            id,
+            service_name,
+            service_price,
+            package_weight,
+            package_dimensions,
+            package_description,
+            is_fragile,
+            is_urgent,
+            pickup_address,
+            pickup_instructions,
+            delivery_address,
+            delivery_instructions,
+            customer_name,
+            customer_phone,
+            customer_email,
+            pickup_date,
+            pickup_time,
+            drop_date,
+            drop_time,
+            preferred_time,
+            contact_method
           )
         `)
         .eq('id', orderId)
@@ -450,9 +460,11 @@ export class DriverDashboardService {
         throw new Error(error.message);
       }
 
+      console.log('📦 Package orders récupérées:', order.package_orders);
+
       // Transformer les données pour correspondre à l'interface DriverOrder
       if (order) {
-        const driverEarnings = Math.round((order.grand_total * 0.15) / 100);
+        const driverEarnings = Math.round((order.delivery_fee * 0.40));
         const estimatedDistance = Math.round(Math.random() * 8 + 2);
         const estimatedDuration = Math.round(estimatedDistance * 3 + Math.random() * 10);
 
@@ -469,8 +481,8 @@ export class DriverDashboardService {
           actual_distance: estimatedDistance,
           estimated_duration: estimatedDuration,
           actual_duration: estimatedDuration,
-          driver_earnings: driverEarnings,
-          driver_commission_percentage: 15,
+          // Les gains sont calculés dynamiquement : 40% des frais de livraison
+          driver_commission_percentage: 40,
           assigned_at: order.assigned_at || order.created_at,
           picked_up_at: order.actual_delivery,
           delivered_at: order.actual_delivery,
@@ -509,7 +521,8 @@ export class DriverDashboardService {
               phone_number: order.user_profiles.phone_number,
               email: order.user_profiles.email
             } : undefined,
-            items: order.order_items || []
+            items: order.order_items || [],
+            package_orders: order.package_orders || []
           }
         };
 
@@ -548,7 +561,7 @@ export class DriverDashboardService {
         .select('verification_code')
         .eq('id', orderId)
         .eq('driver_id', driverProfile.id)
-        .single();
+          .single();
 
       if (error) {
         throw new Error(error.message);

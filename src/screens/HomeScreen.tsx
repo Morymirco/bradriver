@@ -3,21 +3,23 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  Modal,
-  Pressable,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    Modal,
+    Pressable,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
+import { useAuth } from '../contexts/AuthContext';
 import { useDriver, useNotifications } from '../hooks';
 import { RootStackParamList } from '../navigation';
 import { DriverDashboardService, DriverOrder } from '../services/driverDashboardService';
+import { DriverEarningsService } from '../services/driverEarningsService';
 
 // Couleurs du design system BraPrime
 const PRIMARY = '#E31837';
@@ -28,23 +30,30 @@ const GRAY_300 = '#D1D5DB';
 const GRAY_500 = '#6B7280';
 const GRAY_700 = '#374151';
 const WHITE = '#FFFFFF';
+// Configuration uniformisée des couleurs de statuts
 const STATUS_COLORS = {
-  'pending': '#F59E0B',
-  'confirmed': '#3B82F6',
-  'preparing': '#F59E0B',
-  'ready': '#10B981',
-  'picked_up': '#8B5CF6',
-  'out_for_delivery': '#8B5CF6',
-  'delivered': '#10B981',
-  'cancelled': '#EF4444',
+  // Statuts en anglais
+  'pending': '#F59E0B',      // Orange/Ambre
+  'confirmed': '#3B82F6',    // Bleu
+  'preparing': '#F59E0B',    // Orange/Ambre
+  'ready': '#10B981',        // Vert
+  'picked_up': '#8B5CF6',    // Violet
+  'out_for_delivery': '#FF9800', // Orange vif
+  'delivered': '#10B981',    // Vert
+  'cancelled': '#EF4444',    // Rouge
+  
+  // Statuts traduits en français
   'En attente': '#F59E0B',
   'Confirmée': '#3B82F6',
   'En préparation': '#F59E0B',
   'Prête': '#10B981',
-  'En route': '#8B5CF6',
-  'En livraison': '#8B5CF6',
+  'Récupérée': '#8B5CF6',
+  'En livraison': '#FF9800',
   'Livrée': '#10B981',
   'Annulée': '#EF4444',
+  
+  // Anciens statuts pour compatibilité
+  'En route': '#8B5CF6',
 };
 
 const DARK_BG = '#181A20';
@@ -66,6 +75,8 @@ export const HomeScreen: React.FC = () => {
   const [orders, setOrders] = useState<DriverOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [earningsSummary, setEarningsSummary] = useState<any>(null);
+  const [earningsLoading, setEarningsLoading] = useState(true);
   
   const navigation = useNavigation<NavigationProp>();
 
@@ -79,6 +90,7 @@ export const HomeScreen: React.FC = () => {
   } = useDriver();
 
   const { unreadCount } = useNotifications();
+  const { signOut } = useAuth();
 
   // Charger les commandes
   const loadOrders = async () => {
@@ -98,10 +110,29 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
+  // Charger les statistiques des gains
+  const loadEarningsSummary = async () => {
+    if (!profile?.id) return;
+    
+    try {
+      setEarningsLoading(true);
+      const { summary, error } = await DriverEarningsService.getDriverEarningsSummary(profile.id);
+      if (error) {
+        console.error('Erreur chargement gains:', error);
+      } else {
+        setEarningsSummary(summary);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des gains:', error);
+    } finally {
+      setEarningsLoading(false);
+    }
+  };
+
   // Refresh des commandes
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadOrders();
+    await Promise.all([loadOrders(), loadEarningsSummary()]);
     setRefreshing(false);
   };
 
@@ -123,7 +154,8 @@ export const HomeScreen: React.FC = () => {
   // Charger les commandes au montage du composant
   useEffect(() => {
     loadOrders();
-  }, []);
+    loadEarningsSummary();
+  }, [profile?.id]);
 
   // Filtrage des commandes
   const filteredOrders = orders.filter(order => {
@@ -140,11 +172,11 @@ export const HomeScreen: React.FC = () => {
     setShowLogoutModal(true);
   };
 
-  const confirmLogout = () => {
+  const confirmLogout = async () => {
     setShowLogoutModal(false);
     closeDrawer();
-    // Navigation vers l'écran de login
-    navigation.navigate('Login' as never);
+    // Utiliser la fonction signOut du contexte d'authentification
+    await signOut();
   };
 
   const cancelLogout = () => {
@@ -177,24 +209,30 @@ export const HomeScreen: React.FC = () => {
             <Text style={styles.drawerTitle}>Menu</Text>
           </View>
           <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); navigation.navigate('Profile' as never); }}>
-            <Text style={styles.drawerItemText}>👤 Profil</Text>
+            <MaterialIcons name="person" size={20} color="#FFFFFF" style={styles.drawerItemIcon} />
+            <Text style={styles.drawerItemText}>Profil</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); navigation.navigate('History' as never); }}>
-            <Text style={styles.drawerItemText}>📜 Historique</Text>
+            <MaterialIcons name="history" size={20} color="#FFFFFF" style={styles.drawerItemIcon} />
+            <Text style={styles.drawerItemText}>Historique</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); navigation.navigate('Calendar' as never); }}>
-            <Text style={styles.drawerItemText}>📅 Calendrier</Text>
+            <MaterialIcons name="calendar-today" size={20} color="#FFFFFF" style={styles.drawerItemIcon} />
+            <Text style={styles.drawerItemText}>Calendrier</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); navigation.navigate('Statistics' as never); }}>
-            <Text style={styles.drawerItemText}>📊 Statistiques</Text>
+            <MaterialIcons name="bar-chart" size={20} color="#FFFFFF" style={styles.drawerItemIcon} />
+            <Text style={styles.drawerItemText}>Statistiques</Text>
           </TouchableOpacity>
           {!isIndependent && (
             <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); navigation.navigate('ServiceSelection' as never); }}>
-              <Text style={styles.drawerItemText}>🏢 Services</Text>
+              <MaterialIcons name="business" size={20} color="#FFFFFF" style={styles.drawerItemIcon} />
+              <Text style={styles.drawerItemText}>Services</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.drawerItem} onPress={handleLogout}>
-            <Text style={[styles.drawerItemText, {color: '#E31837'}]}>🚪 Déconnexion</Text>
+            <MaterialIcons name="logout" size={20} color="#E31837" style={styles.drawerItemIcon} />
+            <Text style={[styles.drawerItemText, {color: '#E31837'}]}>Déconnexion</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -235,11 +273,11 @@ export const HomeScreen: React.FC = () => {
           <Text style={styles.headerSubtitle}>
             {profile ? profile.name : 'Chargement...'}
           </Text>
-          {/* Affichage du statut du chauffeur */}
+          {/* Affichage du statut du livreur */}
           {isIndependent ? (
             <View style={styles.independentBadge}>
-              <MaterialIcons name="person" size={16} color={WHITE} />
-              <Text style={styles.independentBadgeText}>Chauffeur Indépendant</Text>
+              <MaterialIcons name="local-shipping" size={16} color={WHITE} />
+              <Text style={styles.independentBadgeText}>Livreur BraPrime</Text>
             </View>
           ) : businessServiceName ? (
             <View style={styles.serviceBadge}>
@@ -252,7 +290,10 @@ export const HomeScreen: React.FC = () => {
             </View>
           ) : null}
         </View>
-        <TouchableOpacity style={styles.notificationButton}>
+        <TouchableOpacity 
+          style={styles.notificationButton}
+          onPress={() => navigation.navigate('Notifications')}
+        >
           <MaterialIcons name="notifications" size={24} color={DARK_TEXT} />
           {unreadCount > 0 && (
             <View style={styles.notificationBadge}>
@@ -262,18 +303,18 @@ export const HomeScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Statut Indépendant (pour les chauffeurs indépendants) */}
+      {/* Statut Indépendant (pour les livreurs de BraPrime) */}
       {isIndependent && (
         <View style={styles.serviceManagementContainer}>
-          <Text style={styles.serviceManagementTitle}>Statut Indépendant</Text>
+          <Text style={styles.serviceManagementTitle}>Livreur de BraPrime</Text>
           <View style={styles.independentStatusContainer}>
-            <MaterialIcons name="person" size={24} color="#10B981" />
+            <MaterialIcons name="local-shipping" size={24} color="#10B981" />
             <Text style={styles.independentStatusText}>
-              Vous travaillez en tant que chauffeur indépendant
+              Vous êtes un livreur indépendant de BraPrime
             </Text>
           </View>
           <Text style={styles.independentStatusSubtext}>
-            Vous pouvez accepter des commandes de tous les services disponibles
+            Vous pouvez accepter des commandes de tous les partenaires BraPrime
           </Text>
         </View>
       )}
@@ -315,6 +356,46 @@ export const HomeScreen: React.FC = () => {
           >
             <Text style={styles.serviceInfoButtonText}>Quitter le Service</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Statistiques des gains */}
+      {earningsSummary && (
+        <View style={styles.earningsContainer}>
+          <View style={styles.earningsHeader}>
+            <MaterialIcons name="euro" size={24} color={PRIMARY} />
+            <Text style={styles.earningsTitle}>Mes Gains</Text>
+          </View>
+          
+          <View style={styles.earningsStats}>
+            <View style={styles.earningsStatItem}>
+              <Text style={styles.earningsStatLabel}>Ce mois</Text>
+              <Text style={styles.earningsStatValue}>
+                {DriverEarningsService.formatEarnings(earningsSummary.current_month_earnings || 0)}
+              </Text>
+              <Text style={styles.earningsStatSubtext}>
+                {earningsSummary.current_month_orders || 0} commandes
+              </Text>
+            </View>
+            
+            <View style={styles.earningsStatDivider} />
+            
+            <View style={styles.earningsStatItem}>
+              <Text style={styles.earningsStatLabel}>Total</Text>
+              <Text style={styles.earningsStatValue}>
+                {DriverEarningsService.formatEarnings(earningsSummary.total_earnings || 0)}
+              </Text>
+              <Text style={styles.earningsStatSubtext}>
+                {earningsSummary.total_orders_completed || 0} commandes
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.earningsFooter}>
+            <Text style={styles.earningsAverage}>
+              Moyenne: {DriverEarningsService.formatEarnings(earningsSummary.lifetime_avg_earnings_per_order || 0)} par commande
+            </Text>
+          </View>
         </View>
       )}
 
@@ -368,7 +449,7 @@ export const HomeScreen: React.FC = () => {
             <TouchableOpacity
               key={order.id}
               style={styles.orderCard}
-              onPress={() => navigation.navigate('OrderDetail', { orderId: order.id })}
+              onPress={() => navigation.navigate('OrderDetail', { orderId: order.order_id || order.order?.id || order.id })}
               activeOpacity={0.8}
             >
               <View style={styles.orderHeader}>
@@ -409,7 +490,9 @@ export const HomeScreen: React.FC = () => {
                 </View>
                 <View style={styles.amountInfo}>
                   <Text style={styles.amountLabel}>Gains</Text>
-                  <Text style={styles.orderAmount}>{order.driver_earnings.toLocaleString('fr-FR')} GNF</Text>
+                  <Text style={styles.orderAmount}>
+                    {DriverEarningsService.formatEarnings(DriverEarningsService.calculateEarnings(order.order?.delivery_fee || 0))}
+                  </Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -515,6 +598,11 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#353945',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  drawerItemIcon: {
+    marginRight: 12,
   },
   drawerItemText: {
     fontSize: 16,
@@ -981,5 +1069,75 @@ const styles = StyleSheet.create({
     color: WHITE,
     fontSize: 14,
     fontWeight: '700',
+  },
+  
+  // Styles pour les gains
+  earningsContainer: {
+    padding: 16,
+    backgroundColor: DARK_CARD,
+    borderRadius: 12,
+    marginTop: 16,
+    marginHorizontal: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  earningsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  earningsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: PRIMARY,
+    marginLeft: 8,
+  },
+  earningsStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  earningsStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  earningsStatLabel: {
+    fontSize: 12,
+    color: GRAY_500,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  earningsStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: PRIMARY,
+    marginBottom: 2,
+  },
+  earningsStatSubtext: {
+    fontSize: 11,
+    color: GRAY_500,
+    fontWeight: '500',
+  },
+  earningsStatDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: DARK_GRAY,
+    marginHorizontal: 16,
+  },
+  earningsFooter: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: DARK_GRAY,
+    alignItems: 'center',
+  },
+  earningsAverage: {
+    fontSize: 13,
+    color: GRAY_500,
+    fontWeight: '500',
+    textAlign: 'center',
   },
 }); 

@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_CONFIG } from '../config/env';
 
@@ -114,7 +115,30 @@ export const supabase = createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_K
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false
+    detectSessionInUrl: false,
+    storage: {
+      getItem: async (key) => {
+        try {
+          return await AsyncStorage.getItem(key);
+        } catch {
+          return null;
+        }
+      },
+      setItem: async (key, value) => {
+        try {
+          await AsyncStorage.setItem(key, value);
+        } catch {
+          // Ignore les erreurs de stockage
+        }
+      },
+      removeItem: async (key) => {
+        try {
+          await AsyncStorage.removeItem(key);
+        } catch {
+          // Ignore les erreurs de stockage
+        }
+      }
+    }
   }
 });
 
@@ -162,14 +186,11 @@ export const orderApi = {
   // Récupérer les commandes assignées au chauffeur
   async getAssignedOrders(driverId: string): Promise<Order[]> {
     const { data, error } = await supabase
-      .from('driver_orders')
+      .from('orders')
       .select(`
         *,
-        order:orders (
-          *,
-          business:businesses(name, address, phone),
-          user:user_profiles(name, phone_number, email)
-        )
+        business:businesses(name, address, phone),
+        user:user_profiles(name, phone_number, email)
       `)
       .eq('driver_id', driverId)
       .order('created_at', { ascending: false });

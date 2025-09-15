@@ -1,108 +1,137 @@
 export const colors = {
-  // Couleurs principales BraPrime
+  // Couleurs principales BraPrime - Nouvelle palette sophistiquée
   primary: {
-    50: '#E3F2FD',
-    100: '#BBDEFB',
-    200: '#90CAF9',
-    300: '#64B5F6',
-    400: '#42A5F5',
-    500: '#2196F3', // Couleur principale
-    600: '#1E88E5',
-    700: '#1976D2',
-    800: '#1565C0',
-    900: '#0D47A1',
+    50: '#fdf0d5',  // Beige clair
+    100: '#fdf0d5',
+    200: '#fdf0d5',
+    300: '#c1121f', // Rouge moyen
+    400: '#c1121f',
+    500: '#780000', // Rouge foncé principal
+    600: '#780000',
+    700: '#780000',
+    800: '#780000',
+    900: '#780000',
   },
   
-  // Couleurs secondaires
+  // Couleurs secondaires - Bleu marine
   secondary: {
-    50: '#FFF3E0',
-    100: '#FFE0B2',
-    200: '#FFCC80',
-    300: '#FFB74D',
-    400: '#FFA726',
-    500: '#FF9800', // Couleur secondaire
-    600: '#FB8C00',
-    700: '#F57C00',
-    800: '#EF6C00',
-    900: '#E65100',
+    50: '#669bbc',  // Bleu clair
+    100: '#669bbc',
+    200: '#669bbc',
+    300: '#003049', // Bleu marine
+    400: '#003049',
+    500: '#003049', // Bleu marine principal
+    600: '#003049',
+    700: '#003049',
+    800: '#003049',
+    900: '#003049',
   },
   
-  // Couleurs de succès
+  // Couleurs d'accent - Beige
+  accent: {
+    50: '#fdf0d5',
+    100: '#fdf0d5',
+    200: '#fdf0d5',
+    300: '#fdf0d5',
+    400: '#fdf0d5',
+    500: '#fdf0d5', // Beige principal
+    600: '#fdf0d5',
+    700: '#fdf0d5',
+    800: '#fdf0d5',
+    900: '#fdf0d5',
+  },
+  
+  // Couleurs de succès - Bleu clair
   success: {
-    50: '#E8F5E8',
-    100: '#C8E6C9',
-    200: '#A5D6A7',
-    300: '#81C784',
-    400: '#66BB6A',
-    500: '#4CAF50',
-    600: '#43A047',
-    700: '#388E3C',
-    800: '#2E7D32',
-    900: '#1B5E20',
+    50: '#669bbc',
+    100: '#669bbc',
+    200: '#669bbc',
+    300: '#669bbc',
+    400: '#669bbc',
+    500: '#669bbc', // Bleu clair principal
+    600: '#669bbc',
+    700: '#669bbc',
+    800: '#669bbc',
+    900: '#669bbc',
   },
   
-  // Couleurs d'erreur
+  // Couleurs d'erreur - Rouge moyen
   error: {
-    50: '#FFEBEE',
-    100: '#FFCDD2',
-    200: '#EF9A9A',
-    300: '#E57373',
-    400: '#EF5350',
-    500: '#F44336',
-    600: '#E53935',
-    700: '#D32F2F',
-    800: '#C62828',
-    900: '#B71C1C',
+    50: '#c1121f',
+    100: '#c1121f',
+    200: '#c1121f',
+    300: '#c1121f',
+    400: '#c1121f',
+    500: '#c1121f', // Rouge moyen principal
+    600: '#c1121f',
+    700: '#c1121f',
+    800: '#c1121f',
+    900: '#c1121f',
   },
   
-  // Couleurs d'avertissement
+  // Couleurs d'avertissement - Rouge foncé
   warning: {
-    50: '#FFF8E1',
-    100: '#FFECB3',
-    200: '#FFE082',
-    300: '#FFD54F',
-    400: '#FFCA28',
-    500: '#FFC107',
-    600: '#FFB300',
-    700: '#FFA000',
-    800: '#FF8F00',
-    900: '#FF6F00',
+    50: '#780000',
+    100: '#780000',
+    200: '#780000',
+    300: '#780000',
+    400: '#780000',
+    500: '#780000', // Rouge foncé principal
+    600: '#780000',
+    700: '#780000',
+    800: '#780000',
+    900: '#780000',
   },
   
-  // Couleurs neutres
+  // Couleurs d'information - Bleu marine
+  info: {
+    50: '#003049',
+    100: '#003049',
+    200: '#003049',
+    300: '#003049',
+    400: '#003049',
+    500: '#003049', // Bleu marine principal
+    600: '#003049',
+    700: '#003049',
+    800: '#003049',
+    900: '#003049',
+  },
+  
+  // Couleurs neutres - Gris moderne
   neutral: {
-    50: '#FAFAFA',
-    100: '#F5F5F5',
-    200: '#EEEEEE',
-    300: '#E0E0E0',
-    400: '#BDBDBD',
-    500: '#9E9E9E',
-    600: '#757575',
-    700: '#616161',
-    800: '#424242',
-    900: '#212121',
+    50: '#F9FAFB',
+    100: '#F3F4F6',
+    200: '#E5E7EB',
+    300: '#D1D5DB',
+    400: '#9CA3AF',
+    500: '#6B7280',
+    600: '#4B5563',
+    700: '#374151',
+    800: '#1F2937',
+    900: '#111827',
   },
   
-  // Couleurs de fond
+  // Couleurs de fond sombres (pour le thème dark)
   background: {
-    primary: '#FFFFFF',
-    secondary: '#F8F9FA',
-    tertiary: '#E9ECEF',
+    primary: '#181A20',    // Fond principal sombre
+    secondary: '#23262F',  // Fond secondaire
+    tertiary: '#353945',   // Fond tertiaire
+    card: '#2A2D3A',       // Fond des cartes
   },
   
-  // Couleurs de texte
+  // Couleurs de texte pour thème sombre
   text: {
-    primary: '#212121',
-    secondary: '#757575',
-    tertiary: '#9E9E9E',
-    inverse: '#FFFFFF',
+    primary: '#FFFFFF',    // Texte principal
+    secondary: '#E5E7EB',  // Texte secondaire
+    tertiary: '#9CA3AF',   // Texte tertiaire
+    inverse: '#111827',    // Texte inverse
   },
   
-  // Couleurs de bordure
+  // Couleurs de bordure pour thème sombre
   border: {
-    light: '#E0E0E0',
-    medium: '#BDBDBD',
-    dark: '#9E9E9E',
+    light: '#374151',
+    medium: '#4B5563',
+    dark: '#6B7280',
   },
   
   // Couleurs d'ombre
@@ -111,4 +140,30 @@ export const colors = {
     medium: 'rgba(0, 0, 0, 0.2)',
     dark: 'rgba(0, 0, 0, 0.3)',
   },
+  
+  // Couleurs spéciales pour l'application
+  app: {
+    // Couleurs pour les statuts
+    pending: '#780000',    // Rouge foncé pour en attente
+    active: '#669bbc',     // Bleu clair pour actif
+    completed: '#003049',  // Bleu marine pour terminé
+    cancelled: '#c1121f',  // Rouge moyen pour annulé
+    
+    // Couleurs pour les badges
+    badge: {
+      primary: '#780000',  // Rouge foncé BraPrime
+      secondary: '#003049', // Bleu marine
+      success: '#669bbc',  // Bleu clair
+      warning: '#c1121f',  // Rouge moyen
+      info: '#fdf0d5',     // Beige
+    },
+    
+    // Couleurs pour les actions
+    action: {
+      primary: '#780000',  // Action principale (rouge foncé)
+      secondary: '#003049', // Action secondaire (bleu marine)
+      success: '#669bbc',  // Action de succès (bleu clair)
+      danger: '#c1121f',   // Action dangereuse (rouge moyen)
+    }
+  }
 }; 

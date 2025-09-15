@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, ScrollView, Alert, SafeAreaView } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../navigation';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useOffers } from '../components/OffersContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useDriver } from '../hooks/useDriver';
-import { colors } from '../theme/colors';
+import { RootStackParamList } from '../navigation';
+import { DriverEarningsService } from '../services/driverEarningsService';
+import { ProfileService } from '../services/profileService';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
-const AVATAR = 'https://randomuser.me/api/portraits/men/32.jpg';
+const DEFAULT_AVATAR = 'https://randomuser.me/api/portraits/men/32.jpg';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 type PanelType = 'main' | 'edit' | 'documents' | 'support' | 'delete';
@@ -19,9 +20,22 @@ type PanelType = 'main' | 'edit' | 'documents' | 'support' | 'delete';
 export const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { acceptedOffers } = useOffers();
-  const { driver, signOut } = useAuth();
+  const { driver, signOut, refreshDriver } = useAuth();
   const { updateProfile, loading } = useDriver();
   const [selectedPanel, setSelectedPanel] = useState<PanelType>('main');
+  
+  // États pour la modification du profil
+  const [profileData, setProfileData] = useState({
+    name: '',
+    email: '',
+    phone_number: '',
+    vehicle_type: '',
+    vehicle_plate: ''
+  });
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [earningsSummary, setEarningsSummary] = useState<any>(null);
 
   const handlePanelChange = (panel: PanelType) => {
     setSelectedPanel(panel);
@@ -29,6 +43,169 @@ export const ProfileScreen: React.FC = () => {
 
   const handleBack = () => {
     setSelectedPanel('main');
+  };
+
+  // Charger les données du profil
+  useEffect(() => {
+    if (driver) {
+      setProfileData({
+        name: driver.name || '',
+        email: driver.email || '',
+        phone_number: driver.phone_number || '',
+        vehicle_type: driver.vehicle_type || '',
+        vehicle_plate: driver.vehicle_plate || ''
+      });
+    }
+  }, [driver]);
+
+  // Charger les statistiques des gains
+  const loadEarningsSummary = async () => {
+    if (!driver?.id) return;
+    
+    try {
+      const { summary } = await DriverEarningsService.getDriverEarningsSummary(driver.id);
+      setEarningsSummary(summary);
+    } catch (error) {
+      console.error('Erreur lors du chargement des gains:', error);
+    }
+  };
+
+  // Charger les gains au montage
+  useEffect(() => {
+    loadEarningsSummary();
+  }, [driver?.id]);
+
+  // Gérer l'upload d'avatar
+  const handleAvatarUpload = async () => {
+    if (!driver?.id) return;
+
+    Alert.alert(
+      'Changer l\'avatar',
+      'Choisissez une option',
+      [
+        {
+          text: 'Annuler',
+          style: 'cancel'
+        },
+        {
+          text: 'Galerie',
+          onPress: async () => {
+            setIsUploadingAvatar(true);
+            try {
+              const imageUri = await ProfileService.pickImage();
+              if (imageUri) {
+                await uploadAvatarToStorage(imageUri);
+              }
+            } catch (error) {
+              Alert.alert('Erreur', 'Impossible de sélectionner l\'image');
+            } finally {
+              setIsUploadingAvatar(false);
+            }
+          }
+        },
+        {
+          text: 'Caméra',
+          onPress: async () => {
+            setIsUploadingAvatar(true);
+            try {
+              const imageUri = await ProfileService.takePhoto();
+              if (imageUri) {
+                await uploadAvatarToStorage(imageUri);
+              }
+            } catch (error) {
+              Alert.alert('Erreur', 'Impossible de prendre la photo');
+            } finally {
+              setIsUploadingAvatar(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Upload l'avatar vers le storage
+  const uploadAvatarToStorage = async (imageUri: string) => {
+    if (!driver?.id) return;
+
+    try {
+      console.log('🔍 Début upload avatar vers storage...');
+      console.log('🔍 URI de l\'image:', imageUri);
+      
+      // Supprimer l'ancien avatar si il existe
+      if (driver.avatar_url) {
+        console.log('🔍 Suppression de l\'ancien avatar...');
+        await ProfileService.deleteOldAvatar(driver.avatar_url);
+      }
+
+      // Upload le nouvel avatar
+      console.log('🔍 Upload du nouvel avatar...');
+      const result = await ProfileService.uploadAvatar(imageUri, driver.id);
+      
+      if (result.error) {
+        console.error('❌ Erreur upload:', result.error);
+        Alert.alert('Erreur', result.error);
+        return;
+      }
+
+      console.log('✅ Upload réussi, URL:', result.url);
+
+      // Mettre à jour le profil avec la nouvelle URL
+      console.log('🔍 Mise à jour du profil...');
+      const updateResult = await ProfileService.updateProfile(driver.id, {
+        avatar_url: result.url
+      });
+
+      if (updateResult.success) {
+        console.log('✅ Profil mis à jour avec succès');
+        Alert.alert('Succès', 'Avatar mis à jour avec succès');
+        // Recharger les données du driver
+        await refreshDriver();
+      } else {
+        console.error('❌ Erreur mise à jour profil:', updateResult.error);
+        Alert.alert('Erreur', updateResult.error || 'Erreur lors de la mise à jour');
+      }
+
+    } catch (error) {
+      console.error('❌ Erreur générale:', error);
+      Alert.alert('Erreur', 'Impossible de mettre à jour l\'avatar');
+    }
+  };
+
+  // Test de l'upload avec une image de test
+  const testUpload = async () => {
+    if (!driver?.id) return;
+    
+    console.log('🔍 Test d\'upload avec image de test...');
+    const result = await ProfileService.testUploadWithSampleImage(driver.id);
+    
+    if (result.success) {
+      Alert.alert('Test réussi', `Image de test uploadée: ${result.url}`);
+    } else {
+      Alert.alert('Test échoué', result.error || 'Erreur lors du test');
+    }
+  };
+
+  // Sauvegarder les modifications du profil
+  const handleSaveProfile = async () => {
+    if (!driver?.id) return;
+
+    setIsUpdating(true);
+    try {
+      const result = await ProfileService.updateProfile(driver.id, profileData);
+      
+      if (result.success) {
+        Alert.alert('Succès', 'Profil mis à jour avec succès');
+        setSelectedPanel('main');
+        // Recharger les données du driver
+        await refreshDriver();
+      } else {
+        Alert.alert('Erreur', result.error || 'Erreur lors de la mise à jour');
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de mettre à jour le profil');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const renderMainProfile = () => (
@@ -44,19 +221,32 @@ export const ProfileScreen: React.FC = () => {
 
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
-            <Image source={{uri: AVATAR}} style={styles.avatar} />
-            <TouchableOpacity style={styles.editAvatarButton}>
-              <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
+            <Image 
+              source={{uri: driver?.avatar_url || DEFAULT_AVATAR}} 
+              style={styles.avatar} 
+            />
+            <TouchableOpacity 
+              style={styles.editAvatarButton}
+              onPress={handleAvatarUpload}
+              disabled={isUploadingAvatar}
+            >
+              {isUploadingAvatar ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
+              )}
             </TouchableOpacity>
           </View>
-          <Text style={styles.name}>{driver?.name || 'Chauffeur'}</Text>
+                        <Text style={styles.name}>{driver?.name || 'Livreur'}</Text>
           <Text style={styles.email}>{driver?.email || 'email@example.com'}</Text>
-          <Text style={styles.phone}>{driver?.phone || '+33 6 12 34 56 78'}</Text>
+          <Text style={styles.phone}>{driver?.phone_number || '+33 6 12 34 56 78'}</Text>
         </View>
 
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{driver?.total_deliveries || 0}</Text>
+            <Text style={styles.statNumber}>
+              {earningsSummary?.total_orders_completed || driver?.total_deliveries || 0}
+            </Text>
             <Text style={styles.statLabel}>Livraisons</Text>
           </View>
           <View style={styles.statCard}>
@@ -64,7 +254,12 @@ export const ProfileScreen: React.FC = () => {
             <Text style={styles.statLabel}>Note</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{driver?.total_earnings?.toLocaleString('fr-FR') || '0'} GNF</Text>
+            <Text style={styles.statNumber}>
+              {earningsSummary ? 
+                DriverEarningsService.formatEarnings(earningsSummary.total_earnings || 0) :
+                (driver?.total_earnings?.toLocaleString('fr-FR') || '0') + ' GNF'
+              }
+            </Text>
             <Text style={styles.statLabel}>Gains</Text>
           </View>
         </View>
@@ -105,6 +300,15 @@ export const ProfileScreen: React.FC = () => {
             <Text style={[styles.actionText, { color: '#EF4444' }]}>Supprimer le compte</Text>
             <MaterialIcons name="chevron-right" size={24} color="#AAAAAA" />
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={testUpload}
+          >
+            <MaterialIcons name="bug-report" size={24} color="#E31837" />
+            <Text style={styles.actionText}>Test Upload Avatar</Text>
+            <MaterialIcons name="chevron-right" size={24} color="#AAAAAA" />
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
@@ -127,42 +331,85 @@ export const ProfileScreen: React.FC = () => {
 
         <View style={styles.formContainer}>
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Prénom</Text>
+            <Text style={styles.inputLabel}>Nom complet</Text>
             <View style={styles.inputContainer}>
-              <TextInput style={styles.input} placeholder="Prénom" placeholderTextColor="#888" defaultValue="Ibrahim" />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Nom</Text>
-            <View style={styles.inputContainer}>
-              <TextInput style={styles.input} placeholder="Nom" placeholderTextColor="#888" defaultValue="Diallo" />
+              <TextInput 
+                style={styles.input} 
+                placeholder="Nom complet" 
+                placeholderTextColor="#888" 
+                value={profileData.name}
+                onChangeText={(text) => setProfileData({...profileData, name: text})}
+              />
             </View>
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Email</Text>
             <View style={styles.inputContainer}>
-              <TextInput style={styles.input} placeholder="Email" placeholderTextColor="#888" defaultValue={USER.email} keyboardType="email-address" />
+              <TextInput 
+                style={styles.input} 
+                placeholder="Email" 
+                placeholderTextColor="#888" 
+                value={profileData.email}
+                onChangeText={(text) => setProfileData({...profileData, email: text})}
+                keyboardType="email-address" 
+              />
             </View>
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Téléphone</Text>
             <View style={styles.inputContainer}>
-              <TextInput style={styles.input} placeholder="+33 6 12 34 56 78" placeholderTextColor="#888" />
+              <TextInput 
+                style={styles.input} 
+                placeholder="+33 6 12 34 56 78" 
+                placeholderTextColor="#888" 
+                value={profileData.phone_number}
+                onChangeText={(text) => setProfileData({...profileData, phone_number: text})}
+                keyboardType="phone-pad"
+              />
+            </View>
+          </View>
+
+
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Type de véhicule</Text>
+            <View style={styles.inputContainer}>
+              <TextInput 
+                style={styles.input} 
+                placeholder="Ex: Moto, Voiture, Camion" 
+                placeholderTextColor="#888" 
+                value={profileData.vehicle_type}
+                onChangeText={(text) => setProfileData({...profileData, vehicle_type: text})}
+              />
             </View>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Adresse</Text>
+            <Text style={styles.inputLabel}>Plaque d'immatriculation</Text>
             <View style={styles.inputContainer}>
-              <TextInput style={styles.input} placeholder="Adresse" placeholderTextColor="#888" />
+              <TextInput 
+                style={styles.input} 
+                placeholder="Ex: AB-123-CD" 
+                placeholderTextColor="#888" 
+                value={profileData.vehicle_plate}
+                onChangeText={(text) => setProfileData({...profileData, vehicle_plate: text})}
+                autoCapitalize="characters"
+              />
             </View>
           </View>
 
-          <TouchableOpacity style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Sauvegarder les modifications</Text>
+          <TouchableOpacity 
+            style={[styles.saveButton, isUpdating && styles.saveButtonDisabled]}
+            onPress={handleSaveProfile}
+            disabled={isUpdating}
+          >
+            {isUpdating ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.saveButtonText}>Sauvegarder les modifications</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -502,6 +749,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginTop: spacing.lg,
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#666666',
+    opacity: 0.6,
   },
   saveButtonText: {
     fontSize: typography.body,

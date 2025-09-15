@@ -1,21 +1,20 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  TouchableOpacity,
-} from 'react-native';
-import { Button, Input } from '../components';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../navigation';
+import React, { useState } from 'react';
+import {
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { Button, Input } from '../components';
 import { useAuth } from '../contexts/AuthContext';
-import { ERROR_MESSAGES } from '../config/env';
+import { RootStackParamList } from '../navigation';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -76,7 +75,7 @@ export const LoginScreen: React.FC = () => {
           <View style={styles.formCard}>
             <Text style={styles.title}>Connexion</Text>
             <Text style={styles.description}>
-              Connectez-vous à votre compte chauffeur
+              Connectez-vous à votre compte livreur
             </Text>
             {/* Email Input amélioré */}
             <Input
@@ -129,14 +128,14 @@ export const LoginScreen: React.FC = () => {
             <Text style={styles.forgotPassword} onPress={() => navigation.navigate('ForgotPassword')}>
               Mot de passe oublié ?
             </Text>
-            <Text style={styles.registerLink} onPress={() => navigation.navigate('Register')}>
-              Pas encore de compte ? S'inscrire
+            <Text style={styles.registerLink}>
+              Pas encore de compte ? Faites une demande d'inscription
             </Text>
           </View>
           {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              © 2024 BraPrime. Tous droits réservés.
+              © 2025 BraPrime. Tous droits réservés.
             </Text>
           </View>
         </View>
@@ -233,10 +232,10 @@ const styles = StyleSheet.create({
   },
   registerLink: {
     fontSize: 15,
-    color: RED,
+    color: '#888',
     textAlign: 'center',
     marginTop: 12,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   footer: {
     alignItems: 'center',

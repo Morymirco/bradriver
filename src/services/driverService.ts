@@ -303,7 +303,7 @@ export class DriverService {
       }
 
       const totalDeliveries = orders?.length || 0;
-      const totalEarnings = orders?.reduce((sum, order) => sum + (order.delivery_fee || 0), 0) || 0;
+      const totalEarnings = orders?.reduce((sum, order) => sum + Math.round((order.delivery_fee || 0) * 0.40), 0) || 0;
       const averageRating = orders?.length > 0 
         ? orders.reduce((sum, order) => sum + (order.customer_rating || 0), 0) / orders.length 
         : 0;
@@ -319,7 +319,7 @@ export class DriverService {
       }) || [];
 
       const currentMonthDeliveries = currentMonthOrders.length;
-      const currentMonthEarnings = currentMonthOrders.reduce((sum, order) => sum + (order.delivery_fee || 0), 0);
+      const currentMonthEarnings = currentMonthOrders.reduce((sum, order) => sum + Math.round((order.delivery_fee || 0) * 0.40), 0);
 
       // Stats spécifiques au business si applicable
       let businessStats = {};
@@ -327,7 +327,7 @@ export class DriverService {
         const businessDeliveries = orders?.filter(order => order.business_id === profile.business_id).length || 0;
         const businessEarnings = orders
           ?.filter(order => order.business_id === profile.business_id)
-          .reduce((sum, order) => sum + (order.delivery_fee || 0), 0) || 0;
+          .reduce((sum, order) => sum + Math.round((order.delivery_fee || 0) * 0.40), 0) || 0;
 
         businessStats = {
           business_deliveries: businessDeliveries,

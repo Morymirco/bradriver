@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Modal } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../navigation';
-import { useOffers } from '../components/OffersContext';
+import React, { useState } from 'react';
+import { Modal, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
+import { useOffers } from '../components/OffersContext';
+import { RootStackParamList } from '../navigation';
 
 const DARK_BG = '#181A20';
 const DARK_HEADER = '#23262F';

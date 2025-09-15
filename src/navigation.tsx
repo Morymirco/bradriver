@@ -1,24 +1,25 @@
-import React from 'react';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { HomeScreen } from './screens/HomeScreen';
-import { LoginScreen } from './screens/LoginScreen';
-import { ProfileScreen } from './screens/ProfileScreen';
-import { SplashScreen } from './screens/SplashScreen';
-import { HistoryScreen } from './screens/HistoryScreen';
-import { OrderDetailScreen } from './screens/OrderDetailScreen';
-import { NavigationScreen } from './screens/NavigationScreen';
-import { GoogleMapScreen } from './screens/GoogleMapScreen';
-import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
-import { RegisterScreen } from './screens/RegisterScreen';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import React from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useAuth } from './contexts/AuthContext';
 import { AvailableOffersScreen } from './screens/AvailableOffersScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
-import { StatisticsScreen } from './screens/StatisticsScreen';
+import { ForgotPasswordScreen } from './screens/ForgotPasswordScreen';
+import { GoogleMapScreen } from './screens/GoogleMapScreen';
+import { HistoryScreen } from './screens/HistoryScreen';
+import { HomeScreen } from './screens/HomeScreen';
+import { LoginScreen } from './screens/LoginScreen';
+import { NavigationScreen } from './screens/NavigationScreen';
+import { NotificationsScreen } from './screens/NotificationsScreen';
+import { OrderDetailScreen } from './screens/OrderDetailScreen';
+import { ProfileScreen } from './screens/ProfileScreen';
+import { RegisterScreen } from './screens/RegisterScreen';
 import { ServiceSelectionScreen } from './screens/ServiceSelectionScreen';
-import { useAuth } from './contexts/AuthContext';
+import { SplashScreen } from './screens/SplashScreen';
+import { StatisticsScreen } from './screens/StatisticsScreen';
 
 export type RootStackParamList = {
   MainTabs: undefined;
@@ -30,12 +31,17 @@ export type RootStackParamList = {
   OrderDetail: {
     orderId: string;
   };
-  Navigation: undefined;
-  GoogleMap: undefined;
+  Navigation: {
+    orderId?: string;
+  };
+  GoogleMap: {
+    orderId?: string;
+  };
   ForgotPassword: undefined;
   Calendar: undefined;
   Statistics: undefined;
   ServiceSelection: undefined;
+  Notifications: undefined;
 };
 
 export type MainTabParamList = {
@@ -116,20 +122,23 @@ const MainTabNavigator = () => {
 };
 
 export const AppNavigator = () => {
-  const { session, loading } = useAuth();
+  const { session, driver, loading } = useAuth();
 
   // Afficher l'écran de chargement pendant la vérification de l'authentification
   if (loading) {
     return <LoadingScreen />;
   }
 
+  // Vérifier à la fois la session ET le driver
+  const isAuthenticated = session && driver;
+
   return (
     <NavigationContainer theme={MyTheme}>
       <Stack.Navigator 
-        initialRouteName={session ? "MainTabs" : "Login"} 
+        initialRouteName={isAuthenticated ? "MainTabs" : "Login"} 
         screenOptions={{ headerShown: false }}
       >
-        {session ? (
+        {isAuthenticated ? (
           // Routes authentifiées
           <>
             <Stack.Screen name="MainTabs" component={MainTabNavigator} />
@@ -141,6 +150,7 @@ export const AppNavigator = () => {
             <Stack.Screen name="Calendar" component={CalendarScreen} />
             <Stack.Screen name="Statistics" component={StatisticsScreen} />
             <Stack.Screen name="ServiceSelection" component={ServiceSelectionScreen} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} />
           </>
         ) : (
           // Routes non authentifiées
